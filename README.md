@@ -83,32 +83,20 @@ AI 读取指南后会分阶段完成一次性的 pi 全套配置，先访谈、�
 
 ### 使用方法
 
-复制下面这段话发给 AI 即可，它会读取 `SKILL.md` 并把 skill（`SKILL.md` + 同目录下的 `claude2pi.py`）下载安装到 `~/.pi/agent/skills/migrate-claude-session-to-pi/`：
+复制下面这段话发给 AI 即可，它会扫描 `./skills` 目录、列出可选 skill、让你勾选要安装哪些，然后把选中的 skill（整个子目录，含 `SKILL.md` 及脚本）下载到 `~/.pi/agent/skills/` 下：
 
 ```
-安装这个 skill：读取它的 SKILL.md，并把 SKILL.md 与同目录下的 claude2pi.py 一起下载到 ~/.pi/agent/skills/migrate-claude-session-to-pi/，安装完成后简要告诉我它的用途与用法
-https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/skills/migrate-claude-session-to-pi/SKILL.md
+列出 skills 目录下所有 skill（每个含 SKILL.md 的子目录即一个 skill），让我选择要安装哪些，然后把选中的 skill 整个子目录下载到 ~/.pi/agent/skills/ 下，安装完成后简要告诉我各自的用途与用法
+https://github.com/SeanDictionary/One-click-configuration-of-Pi/tree/main/skills
 ```
 
-安装后重启 pi（或执行 `/reload`）即可自动发现并加载，支持 `/skill:migrate-claude-session-to-pi` 调用。本仓库 `skills/` 目录下每个子目录都是一个符合 [Agent Skills 标准](https://agentskills.io/specification) 的自包含 skill（含 `SKILL.md` + 脚本）。
+安装后重启 pi（或执行 `/reload`）即可自动发现并加载，可用 `/skill:<名称>` 调用。本仓库 `skills/` 目录下每个子目录都是一个符合 [Agent Skills 标准](https://agentskills.io/specification) 的自包含 skill（含 `SKILL.md` + 脚本）。
 
 ### 作用
 
-当前内置 [`migrate-claude-session-to-pi`](skills/migrate-claude-session-to-pi)：把 Claude Code 会话转换成可被 `pi --resume` 打开的 pi 会话。涉及的全部内容如下：
-
-- **输入**：Claude Code 会话 JSONL（`~/.claude/projects/<编码cwd>/<uuid>.jsonl`）。
-- **输出**：pi 会话 JSONL，写入 `~/.pi/agent/sessions/--<编码cwd>--/<ISO时间戳>_<uuid>.jsonl`，可用 `cd <项目目录> && pi --resume` 打开接续工作。
-- **格式解析**：
-  - Claude 每行是单个流式增量块；同 `message.id` 的多行组成一个助手回合，拼接 `text` 增量重建完整回复；每个 `tool_use` 块本身完整，按 id 与后续 `tool_result` 配对。
-  - pi 会话：`session` 头 → `model_change` → `thinking_level_change` → `message`；`parentId` 形成严格线性链；助手消息带 `toolCall` 块，每条必须有一条匹配的 `toolResult`（按 id 1:1 配对，否则回放会断）。
-- **内容处理**：
-  - 早期历史浓缩为一条结构化摘要用户消息：AGENT.md 约定、用户需求时间线、涉及文件清单、关键进展摘要、最近状态。
-  - 近期对话（`--cutoff` 指定时间点之后）完整保留：助手文本 + 工具调用 + 工具结果。
-  - `thinking` 块全部省略以节省体积；每条工具结果截断到约 500 字符、近期助手文本截断到约 3000 字符。
-  - 过滤 Claude 注入的噪音（`API Error`、`Please run /login`、余额不足、供应商熔断等），避免污染摘要。
-- **工具映射**：`Read→read`、`Edit→edit`、`Write→write`、`Bash/PowerShell/Grep/Glob→bash`；`mcp__*`、`Skill`、`Agent` 等保留原名作为历史上下文（pi 不会重新执行）。
-- **自动配置**：provider/model/thinking 从 `~/.pi/agent/settings.json` 自动读取，无需手填；可用 `--provider/--model/--thinking` 覆盖。
-- **校验**：输出 0 坏 JSON、0 断链（parentId 全部指向已存在 id）、工具调用数 == 工具结果数、0 孤儿、`stopReason` 取值 ⊆ `{end_turn, toolUse}`。一个约 12 MB / 1 万行的会话典型压缩到约 175 KB。
+| Skill 名称 | 主要功能 |
+|---|---|
+| [`migrate-claude-session-to-pi`](skills/migrate-claude-session-to-pi) | 把 Claude Code 会话 JSONL 转换成可被 `pi --resume` 打开的 pi 会话：早期历史浓缩为摘要、近期对话完整保留，工具调用映射到 pi 工具，thinking 省略、结果截断，provider/model 自动从 pi settings 读取。 |
 
 ---
 
