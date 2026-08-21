@@ -78,11 +78,9 @@ Pi 会读取指南后，按 5 个阶段逐步执行：
 
 ## 使用方法
 
-1. 下载 [`pi配置指南.md`](./pi配置指南.md)（直接保存或 `git clone` 本仓库）。
-2. 打开 Pi，把这份 `.md` 文件交给它（粘贴内容或 `/read` 读入）。
-3. Pi 会先自动探测环境，确认 `ask_user_question` 可用后开始分轮访谈，逐轮等你回答。
-4. 全部访谈完成、你确认汇总答案后，Pi 立即自动安装依赖并写入全部配置文件。
-5. 按提示重启 Pi、用 `/provider` 配好 API key（若用了 gh 还需 `gh auth login`）即可。
+直接把下面这个链接丢给 Pi，它会自动下载读取并按阶段完成全部配置，无需你手动下载或 clone：
+
+https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%85%8D%E7%BD%AE%E6%8C%87%E5%8D%97.md
 
 ---
 
