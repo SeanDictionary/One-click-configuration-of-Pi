@@ -62,6 +62,50 @@ Pi 会读取指南后，按 5 个阶段逐步执行：
 
 ---
 
+## 内置 Skills
+
+本仓库 `skills/` 目录下提供可直接复用的 pi skill，每个子目录都是一个符合 [Agent Skills 标准](https://agentskills.io/specification) 的自包含 skill（含 `SKILL.md` + 脚本）。
+
+| Skill | 作用 |
+|---|---|
+| [`migrate-claude-session-to-pi`](skills/migrate-claude-session-to-pi) | 把 Claude Code 会话（`~/.claude/projects/.../*.jsonl`）转换成可被 `pi --resume` 打开的 pi 会话；早期历史浓缩为摘要、近期对话完整保留，工具调用映射到 pi 工具，thinking 省略、结果截断。自动从 `~/.pi/agent/settings.json` 读取 provider/model。 |
+
+### 安装内置 Skill
+
+任选其一：
+
+**方式 A · 复制到 pi 全局 skills 目录（推荐）**
+
+```bash
+cp -r skills/migrate-claude-session-to-pi ~/.pi/agent/skills/
+```
+
+复制后重启 pi（或在 pi 中执行 `/reload`），即可自动发现并加载，支持 `/skill:migrate-claude-session-to-pi` 调用。
+
+**方式 B · 把本仓库 `skills/` 目录登记为 skills 源**
+
+把仓库 clone 到本地后，在 `~/.pi/agent/settings.json` 的 `skills` 数组里加入该目录路径：
+
+```json
+{
+  "skills": ["D:/Github/One-click-configuration-of-Pi/skills"]
+}
+```
+
+pi 会递归发现该目录下所有含 `SKILL.md` 的子目录。
+
+### 使用示例（迁移 Claude 会话）
+
+```bash
+python ~/.pi/agent/skills/migrate-claude-session-to-pi/claude2pi.py \
+  "~/.claude/projects/<编码cwd>/<uuid>.jsonl" "<项目工作目录>" --cutoff "<ISO时间戳>"
+```
+
+- `--cutoff`：该时间点之后的回合完整保留为近期对话，之前的浓缩为一条结构化摘要；省略或传 `""` 则保留全部为近期对话。
+- 完成后用 `cd <项目目录> && pi --resume` 选择迁移出的会话即可接续工作。
+
+---
+
 ## 会写入的配置文件清单
 
 所有文件位于 `~/.pi/` 下，路径跨平台（Windows / macOS / Linux）：
