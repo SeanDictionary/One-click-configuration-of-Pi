@@ -82,17 +82,14 @@ cp -r skills/migrate-claude-session-to-pi ~/.pi/agent/skills/
 
 复制后重启 pi（或在 pi 中执行 `/reload`），即可自动发现并加载，支持 `/skill:migrate-claude-session-to-pi` 调用。
 
-**方式 B · 把本仓库 `skills/` 目录登记为 skills 源**
+**方式 B · 交给 AI 自动安装**
 
-把仓库 clone 到本地后，在 `~/.pi/agent/settings.json` 的 `skills` 数组里加入该目录路径：
+复制下面这段话发给 AI 即可，它会读取 `SKILL.md` 并把 skill（`SKILL.md` + 同目录下的 `claude2pi.py`）下载安装到 `~/.pi/agent/skills/migrate-claude-session-to-pi/`：
 
-```json
-{
-  "skills": ["D:/Github/One-click-configuration-of-Pi/skills"]
-}
 ```
-
-pi 会递归发现该目录下所有含 `SKILL.md` 的子目录。
+安装这个 skill：读取它的 SKILL.md，并把 SKILL.md 与同目录下的 claude2pi.py 一起下载到 ~/.pi/agent/skills/migrate-claude-session-to-pi/，安装完成后简要告诉我它的用途与用法
+https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/skills/migrate-claude-session-to-pi/SKILL.md
+```
 
 ### 使用示例（迁移 Claude 会话）
 
