@@ -2,7 +2,14 @@
 
 当你初次安装 [Pi](https://github.com/earendil-works/pi-coding-agent) 时，会发现缺少很多插件生态的支持，会特别难用，包括 Pi 自身的配置项。
 
-你只需要下载 [pi配置指南.md](./pi配置指南.md)，然后将这个文档丢给 Pi，它就会按阶段逐项访谈你并自动配置好全部内容。
+## 使用方法
+
+复制下面这段话发给 AI 即可，它会自动下载读取并按文档完成全部配置：
+
+```
+读取这篇文档，并按这篇文档内容进行配置
+https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%85%8D%E7%BD%AE%E6%8C%87%E5%8D%97.md
+```
 
 ---
 
@@ -73,14 +80,6 @@ Pi 会读取指南后，按 5 个阶段逐步执行：
 | `~/.pi/agent/mcp.json` | MCP 自动导入（仅当选 A 时创建） |
 
 `fusion-models.json` 默认不创建，仅当用户明确要"模型融合"且能提供 ≥2 个 model id 时才生成。
-
----
-
-## 使用方法
-
-直接把下面这个链接丢给 Pi，它会自动下载读取并按阶段完成全部配置，无需你手动下载或 clone：
-
-https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%85%8D%E7%BD%AE%E6%8C%87%E5%8D%97.md
 
 ---
 
