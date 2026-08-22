@@ -31,7 +31,7 @@ AI 读取指南后会分阶段完成一次性的 pi 全套配置，先访谈、�
   - G · LSP 语言（TS/JS、Rust）
   - H · 并发与续轮（`maxConcurrent`、`continuationLimits`）
   - I · Skills 来源（复用 Claude Code / Codex / Cursor 等的 skills 目录）
-  - J · 状态栏与权限模式（显示段、配色、密度、分隔符、截断、yoloMode、后台更新检查）
+  - J · 状态栏与权限模式（**基础/高级两种模式**：基础勾选段+配色/密度/分隔符/截断，高级用原生 starship TOML 模板 `$变量`+`($style)` 自由排版+`$fill`右对齐+多行+阈值变色；yoloMode、后台更新检查）
   - K · MCP 接入（自动导入 / 手动导入 / 不复用）
 - **阶段 2 · 安装外部依赖**：按访谈结果跳过不用的，可能装 GitHub CLI、LSP server、VS Code。
 - **阶段 3 · 写入配置文件**：见下文清单。
@@ -51,7 +51,7 @@ AI 读取指南后会分阶段完成一次性的 pi 全套配置，先访谈、�
 | `@narumitw/pi-goal` | goal 自动续轮 |
 | `@narumitw/pi-lsp` | LSP 语言服务集成（TS / Rust） |
 | `@narumitw/pi-plan-mode` | 计划模式 |
-| `@narumitw/pi-statusline` | 可定制状态栏 |
+| `@narumitw/pi-statusline` 或 `@narumitw/pi-starship` | 可定制状态栏（二选一：基础 JSON 勾选 / 高级 starship TOML 自由排版） |
 | `@narumitw/pi-worktree` | git worktree 管理 |
 | `pi-background-tasks` | 后台任务（带更新检查） |
 | `pi-hermes-memory` | 持久记忆系统 |
@@ -66,7 +66,7 @@ AI 读取指南后会分阶段完成一次性的 pi 全套配置，先访谈、�
 |---|---|
 | `~/.pi/agent/settings.json` | 主题、provider/model、shell、扩展 packages、skills 来源等 |
 | `~/.pi/web-search.json` | 搜索/抓取路由、GitHub clone、代理、YouTube/PDF 等 |
-| `~/.pi/agent/pi-statusline.json` | 状态栏显示段、配色、密度、截断 |
+| `~/.pi/agent/pi-statusline.json` 或 `~/.pi/agent/pi-starship.toml` | 状态栏配置（基础模式写 JSON，高级模式写 TOML；二选一，不共存） |
 | `~/.pi/agent/pi-plan-mode.json` | 计划模式思考档、安全子命令 |
 | `~/.pi/agent/pi-goal.json` | goal 续轮上限 |
 | `~/.pi/agent/subagents.json` | 子代理并发数与轮次 |

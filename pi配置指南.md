@@ -78,7 +78,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 - **第 2 轮 · 外部工具与抓取偏好**：C5 + C6 + C7 + D8 + E9（编辑器/gh/代理/搜索/浏览器）
 - **第 3 轮 · 扩展与语言取舍**：F10 + F11 + G12（语音/rtk/LSP 语言）
 - **第 4 轮 · 性能与 Skills**：H13 + H14 + I15（并发/轮数/skills 源）
-- **第 5 轮 · 状态栏与权限模式**：J16–J24（状态栏段/配色/密度/截断/上下文前缀/图标 + 权限模式 + 后台更新检查）
+- **第 5 轮 · 状态栏与权限模式**：J16–J24（状态栏模式选择[基础/高级/不装] + 基础模式段/配色/密度/截断/上下文前缀/图标或高级模式 starship 模板 + 权限模式 + 后台更新检查）
 - **第 6 轮 · MCP 接入**：K25（是否复用其他 harness 的 MCP 配置、用哪种方式）
 
 > 每轮用 `ask_user_question` 结构化提问效果更佳；用户也可用自定义回答。轮次之间允许用户补充修改上一轮的答案。
@@ -151,7 +151,13 @@ else echo "rpiv-ask-user-question: 未装"; fi
 
 ### J. 状态栏与权限模式（第 5 轮，高度可自定义）
 
-16. **状态栏要显示哪些段**？先把「全开」的样子给用户看，再让用户勾选要保留的段。
+16. **状态栏模式**？先让用户在下面三种里选一种（决定 J17–J22 是否继续问、写哪个配置文件、装哪个扩展）。**默认：基础模式**——不确定或不想折腾就选基础，足够日常使用；高级模式留给想要逐段控制颜色/排版/右对齐/多行的人。
+    - **基础模式（pi-statusline）**（默认）：JSON 配置，勾选要显示的段、选配色/密度/分隔符/截断。简单、够用。→ 继续问 J17–J22，最终写 `pi-statusline.json`。
+    - **高级模式（pi-starship）**：原生 Starship TOML，用 `$变量` + `($style)` 自由排版，支持 `$fill` 右对齐、多行、阈值变色、全套模块。高度自定义。→ **跳过 J17–J22**，改走本问末尾的「高级模板流程」，最终写 `pi-starship.toml`。
+    - **不装**：用 pi 内置状态栏。→ packages 不加 statusline/starship，不写配置文件，跳过 J17–J22。
+    > 基础与高级二选一，不能同时装（两个扩展都独占 footer）。切换时先 `pi remove` 旧扩展再 `pi install` 新扩展。
+
+    **（仅基础模式）状态栏显示哪些段**？先把「全开」的样子给用户看，再让用户勾选要保留的段。
     - 全开示例（pi-statusline 第一行，从左到右）：
       ```
       ░▒▓ 🤖 <模型名> • 🧠 <思考档> • 📁 <当前目录> • 🌿 <git分支或no-git> • ctx <上下文已用%>/<总窗口> • 📦 <保留缓存> CH<命中率%> • 💸 <累计花费>
@@ -167,6 +173,129 @@ else echo "rpiv-ask-user-question: 未装"; fi
       | `cache` | `📦 R4.1m CH99.5%` | 保留缓存 token + 命中率 |
       | `cost` | `💸 $0.05` | 本次会话累计花费 |
     - 默认建议：全开（7 段都保留）。用户可任意子集。
+
+    **（仅高级模式）高级模板流程**：选了高级模式后，分两步走，**前一步定下的模块集合在后一步必须原样继承、不增删不改序**：
+    - **步骤 1 · 内容与布局**：先确定显示哪些模块、什么顺序、是否 `$fill` 右对齐、是否多行 → 得到根 `format`。AI 记录这一步选定的模块集合。
+    - **步骤 2 · 显示样式**：对步骤 1 定下的那批模块逐个定颜色/字重/背景/阈值变色 → 得到各 `[模块]` 表。**严禁在步骤 2 增删模块或改顺序**——样式只作用于步骤 1 的布局。
+    下面先给可用变量表（供步骤 1 选模块），再给两步的语法。不再逐项问 J17–J22。
+    - **可用变量（全套）**：
+      | 模块 | 变量 | 含义 |
+      |---|---|---|
+      | `brand` | `$symbol` | Pi 品牌标记 |
+      | `provider` | `$symbol` `$provider` | 当前 provider 名 |
+      | `model` | `$symbol` `$model` | 当前模型名（可截断） |
+      | `thinking` | `$symbol` `$level` | 思考档（off/minimal/low/medium/high/xhigh/max） |
+      | `directory` | `$symbol` `$path` `$full_path` | 当前目录 |
+      | `git_branch` | `$symbol` `$branch` `$remote_name` `$remote_branch` | git 分支 |
+      | `git_status` | `$symbol` `$all_status` `$ahead` `$behind` `$modified` `$untracked` `$staged` `$conflicted` … | git 状态计数 |
+      | `git_commit` | `$symbol` `$hash` `$tag` | HEAD 短哈希 + tag |
+      | `activity` | `$symbol` `$state` `$tool` `$count` `$text` | 活动工具/流式/空闲 |
+      | `context` | `$symbol` `$percentage` `$tokens` `$window` | 上下文已用% + 窗口 |
+      | `tokens` | `$symbol` `$input` `$output` `$total` | 累计输入/输出 token |
+      | `cache` | `$symbol` `$rate` `$read` `$write` | 缓存命中率 + 读/写 token（默认禁用，需 `disabled=false`） |
+      | `cost` | `$symbol` `$cost` `$subscription` | 累计花费 + (sub) 标记 |
+      | `time` | `$symbol` `$time` | 本地时间 |
+      | `turn` | `$symbol` `$count` | 用户轮次 |
+      | `fill` | `$symbol` | 撑开空白做右对齐布局 |
+      | `extension_status` | `$symbol` `$statuses` `$count` | 其他扩展状态 |
+      > 其余模块（package/nodejs/python/rust/golang/docker_context/kubernetes/aws/gcloud/azure/os/container/hostname/username 等）按需查 pi-starship 文档。
+    - **步骤 1 · 内容与布局语法**（先定模块和顺序，AI 记下这个模块集合传给步骤 2）：
+      - 根 `format` 是若干 `$模块` 顺序拼成的字符串；模块按出现顺序渲染。
+      - `$fill` 把其后内容顶到行尾（右对齐）。多行：在 `format` 里直接换行（TOML 多行字符串）。
+      - 模块默认格式可被 `[模块]` 表覆盖：`format`、`symbol`、`disabled`、`style`，以及模块选项（如 model 的 `truncation_length`/`truncation_symbol`/`truncation_direction`）。
+      - `cache` 默认 `disabled=true`，要用得加 `[cache]` 表设 `disabled = false`。
+    - **步骤 2 · 显示样式**（基于步骤 1 的模块集合，只改色/字重/背景，不动模块和顺序——这是高级模式区别于基础模式的核心）：
+      - **继承约束**：步骤 2 的 `[模块]` 表必须与步骤 1 `format` 里的模块一一对应；不得新增步骤 1 没有的模块、不得删除、不得改顺序。样式是给步骤 1 的布局上色，不是重新布局。
+      - **整段样式**：每个 `[模块]` 表里写 `style = "..."`，作用于该模块 `format` 里 `($style)` 组包住的整段文字。例：`[model]\nstyle = "bold blue"`。
+      - **行内分段样式**：在模块 `format` 里用多个 `($style)` 组给一段文字内的不同部分上不同色。例：`format = "[$model ](bold blue)[$cost](bold red)"`——同一段里模型蓝、花费红。
+      - **样式 token**（空格分隔，后写覆盖前写）：`bold` / `dim` / `italic` / `underline` / 颜色名（`red`/`green`/`blue`/`yellow`/`cyan`/`purple`/`white`/`bright-red`…）/ `fg:#RRGGBB`（前景）/ `bg:#RRGGBB`（背景）/ `prev_fg`（继承上一段前景色）/ `prev_bg`（继承上一段背景色）。例：`"fg:#e3e5e5 bg:#769ff0"`、`"bold bright-yellow"`。
+      - **调色板**：顶部 `palette = "mine"` + `[palettes.mine]` 表自定义颜色名别名（如 `blue = "#86BBD8"`），之后 style 里就能用 `blue` 引用你的色。无内置调色板，不自定义则用终端原色。
+      - **阈值变色**（context/cost 独有）：用 `[[context.display]]` / `[[cost.display]]` 给 `threshold`/`style`/`hidden` 三元组，按当前值命中「最高 threshold 且 ≤ 当前值」的那条样式。默认 `context` 0% 隐藏、30 绿/60 黄/80 红；`cost` 0 隐藏、1 黄/5 红。想让 0 也显示就把 threshold=0 的 `hidden` 改 false；想加更多档（如 50% 橙）就加一条 `[[context.display]]`。
+      - **相邻同色合并**：相邻段背景色相同时自动合并成一个色块，过渡用 powerline 符号衔接——给多段设相同 `bg:#...` 就能拼出连贯色条。
+      - **背景色铺满行为**（取决于布局，设了 `bg:` 才需要考虑）：
+        - **双侧布局（format 含 `$fill`）**：背景自动铺满全行——给 `[fill]` 设与各段相同的 `bg:#...`，`$fill` 撑开的空白就带背景，左右两块连成一整条。无需问用户。
+        - **单侧布局（format 无 `$fill`）**：背景只在有文字的段出现，行尾留空。**必须问用户**：“背景铺满全行”还是“只随文字出现”。选“铺满”→ 在 format 末尾追加 `$fill` 并给 `[fill]` 设 `bg:#...`；选“只随文字”→ 不加 fill，各段背景各自为块。
+    > 基础模式只能从 7 个预设调色板里选一个 + 截断；高级模式能逐段、逐行内片段、逐阈值地控色，这是两者最大的能力差。
+    - **示例模板**（用户可照此改，渲染约：` 📁 ~ 🌿 no-git 📊 6.7%/1.0m 94.5%/1.9m 💸 $0.000          cannbot-dashscope · 🤖 glm-5.2 high`）：
+      ```toml
+      format = """
+      $directory$git_branch$context$cache$cost\
+      $fill\
+      $provider$model$thinking"""
+
+      [model]
+      format = "[$symbol $model]($style)"
+      symbol = "🤖"
+      style = "bold blue"
+      truncation_length = 40
+      truncation_symbol = "…"
+      truncation_direction = "middle"
+
+      [provider]
+      format = "[$provider · ]($style)"
+      symbol = ""
+      style = "bold blue"
+
+      [thinking]
+      format = "[ $level]($style)"
+      symbol = ""
+      style = "bold purple"
+
+      [directory]
+      format = "[ $symbol $path]($style)"
+      symbol = "📁"
+      style = "cyan bold"
+
+      [git_branch]
+      format = "[ $symbol $branch]($style)"
+      symbol = "🌿"
+      style = "bold purple"
+
+      [context]
+      format = "[ $symbol $percentage/$window]($style)"
+      symbol = "📊"
+      [[context.display]]
+      threshold = 0
+      style = "bold green"
+      hidden = false
+      [[context.display]]
+      threshold = 70
+      style = "bold yellow"
+      hidden = false
+      [[context.display]]
+      threshold = 90
+      style = "bold red"
+      hidden = false
+
+      [cache]
+      disabled = false
+      format = "[ $rate/$read]($style)"
+      symbol = ""
+      style = "bold green"
+
+      [cost]
+      symbol = "💸"
+      [[cost.display]]
+      threshold = 0
+      style = "bold green"
+      hidden = false
+      [[cost.display]]
+      threshold = 1
+      style = "bold yellow"
+      hidden = false
+      [[cost.display]]
+      threshold = 5
+      style = "bold red"
+      hidden = false
+      ```
+    - **AI 生成规则**：
+      - **两步一致性**：若用户分两步给（先 format 后样式），步骤 2 的 `[模块]` 表必须与步骤 1 的 `format` 模块集合完全一致；AI 自动校对，发现步骤 2 多写/漏写/改序的模块要以步骤 1 为准回退并提示用户。
+      - 用户给的模板若已含 `[模块]` 表 → 原样写入 `pi-starship.toml`，只补必要缺失项（如 `[[cost.display]]` 的 threshold=0 不隐藏），并校验 `[模块]` 与 `format` 模块一致。
+      - **背景色铺满**：若用户设了 `bg:` 且 format 含 `$fill`（双侧）→ 自动给 `[fill]` 设同色 `bg:`，背景铺满全行，不用问；若 format 不含 `$fill`（单侧）→ 先问用户“铺满全行 / 只随文字”，按答案决定是否末尾加 `$fill`+`bg:`。
+      - 用户若只给了一行 `format` 字符串 → AI 按上面示例的默认 `[模块]` 表补齐（步骤 1 的模块集合决定要补哪些 `[模块]` 表），symbol/style 用合理默认。
+      - 写完后用 `smol-toml`（或 `pi -e npm:@narumitw/pi-starship` 加载后 `/starship status`）校验语法；无效字段会被 pi-starship 警告并忽略。
+      - 用户可事后用 `/starship` → Customize footer 交互调优。
+    > J17–J22 仅在「基础模式」时提问；高级模式直接跳到 J23。
 17. **配色板 `palettePreset`**？
     - 常见值：`ocean`（冷蓝绿，默认）/`dark`/`light`/`solarized`。让用户选，不确定则 `ocean`。
 18. **密度 `density`**？
@@ -297,6 +426,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 ```
 
 **packages 取舍规则**：
+- **状态栏模式（J16）**：基础 → 保留 `"npm:@narumitw/pi-statusline@0.49.6"`；高级 → 删该行、加 `"npm:@narumitw/pi-starship"`；不装 → 删该行且不加替代。基础与高级不能共存。
 - 用户不要语音 → 不变（rpiv-voice 本就不在清单里，默认不装）
 - 用户用 rtk → 追加 `"npm:pi-rtk-optimizer@0.9.0"`；用户要语音 → 追加 `"npm:@juicesharp/rpiv-voice@2.4.0"`
 - 用户不写任何 LSP 语言 → 从清单删 `"npm:@narumitw/pi-lsp@0.49.4"`
@@ -356,7 +486,11 @@ else echo "rpiv-ask-user-question: 未装"; fi
 
 ---
 
-### 3.3 `pi-statusline.json` → `<HOME>/.pi/agent/pi-statusline.json`（按第 5 轮 J16–J22 定制）
+### 3.3 状态栏配置 → `<HOME>/.pi/agent/` 下（按 J16 模式分支）
+
+> J16 选「基础模式」写 `pi-statusline.json`；选「高级模式」写 `pi-starship.toml`；选「不装」跳过本节、不写任何文件。两者只能存在其一。
+
+#### 3.3a 基础模式：`pi-statusline.json`（按 J16–J22 定制）
 
 **全开示例**（供向用户展示用）：
 ```
@@ -388,6 +522,20 @@ else echo "rpiv-ask-user-question: 未装"; fi
 - `segments` 只写用户在 J16 勾选的段，顺序按 `model→thinking→cwd→branch→context→cache→cost`。
 - J20 选“不截断” → 删掉 `segmentText.model` 整段。
 - J22 选“删掉” → 不写 `extensionStatusIcons` 字段（用扩展默认）。
+
+#### 3.3b 高级模式：`pi-starship.toml`（按 J16 高级模板流程）
+
+把用户在 J16 写的 `format` 模板 + `[模块]` 表原样写入 `<HOME>/.pi/agent/pi-starship.toml`。AI 补齐规则见 J16「AI 生成规则」。最小可用示例（即用户只给 `format` 一行时的默认落盘）：
+
+```toml
+format = """
+$brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
+```
+
+- 用户模板已含 `[model]`/`[cache]`/`[context.display]` 等表 → 原样保留，不覆盖。
+- `cache` 若出现在 `format` 里 → 必须有 `[cache]\ndisabled = false`（默认禁用）。
+- `cost` 若要永远显示（含 $0）→ `[[cost.display]]` 的 threshold=0 项 `hidden = false`。
+- 写完用 `smol-toml` 或 `/starship status` 校验；无效字段会被警告并忽略，不会崩溃。
 
 ---
 
@@ -676,7 +824,7 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 2. **文件清单**：`find <HOME>/.pi -type f -name "*.json" | grep -v sessions | grep -v node_modules`，对照阶段 3 应有：
    - `.pi/agent/settings.json`
    - `.pi/web-search.json`
-   - `.pi/agent/pi-statusline.json`
+   - `.pi/agent/pi-statusline.json`（基础模式）或 `.pi/agent/pi-starship.toml`（高级模式）
    - `.pi/agent/pi-plan-mode.json`
    - `.pi/agent/pi-goal.json`
    - `.pi/agent/subagents.json`
@@ -687,7 +835,7 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 4. **装后验证**：
    - `gh auth status`（若用 gh）
    - `typescript-language-server --version` / `rust-analyzer --version`（若用对应 LSP）
-   - pi 启动后状态栏应显示 statusline 配置的段（ocean 配色、model/cwd/branch/context/cache/cost）
+   - pi 启动后状态栏应显示配置的段：基础模式见 J16 勾选段（默认 ocean 配色）；高级模式见 `pi-starship.toml` 的 `format` 拼出的样子
 5. **provider 凭证**：用 pi 的 `/provider` 命令配置访谈 A1 的 provider + API key（或写入 `auth.json`）。
 
 ---
@@ -742,7 +890,7 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 | H13 | maxConcurrent | |
 | H14 | continuationLimits | |
 | I15 | skills 来源（勾选 .claude/.codex/.agents/.cursor/.pi 等） | |
-| J16 | statusline 显示哪些段 | |
+| J16 | 状态栏模式（基础/高级/不装）+ 基础模式勾选段/高级模式模板 | |
 | J17 | 配色板 palettePreset | |
 | J18 | 密度 density | |
 | J19 | 分隔符 separator | |
