@@ -30,7 +30,7 @@ https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%
 | **子代理** | `~/.pi/agent/subagents.json` | maxConcurrent、maxTurns、graceTurns、中断策略 |
 | **持久记忆** | `~/.pi/agent/hermes-memory-config.json` | 记忆策略、容量上限、会话搜索、自动整合 |
 | **LSP** | `~/.pi/agent/pi-lsp.json` | TS/JS、Rust 语言 server（按需，不写则不创建） |
-| **权限** | `~/.pi/agent/extensions/pi-permission-system/config.json` | yoloMode、敏感文件/危险命令拦截、只读白名单、external_directory |
+| **权限** | `~/.pi/agent/extensions/pi-permission-system/config.json` 或 `~/.pi/agent/pi-auto-permissions/config.json` | 命令放行三选一：A 规则匹配（allow/ask/deny + yolo）/ B 模型语义判断 / C 不装（原生全放行） |
 | **模型融合** | `~/.pi/agent/fusion-models.json` | 多候选并行+评分合并（可选，默认不创建） |
 | **后台更新检查** | 环境变量 | `PI_BG_DISABLE_UPDATE_CHECK`（可选，默认开） |
 | **MCP** | `~/.pi/agent/mcp.json` | 复用其他 harness 的 MCP server（可选，默认 off） |
@@ -39,7 +39,7 @@ https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%
 
 | 包名 | 作用 | 安装 |
 |---|---|---|
-| `@gotgenes/pi-permission-system` | 权限系统（yoloMode / 白名单 / 危险命令拦截） | 必装 |
+| `@gotgenes/pi-permission-system` 或 `@ogulcancelik/pi-auto-permissions` | 命令放行（二选一或都不装：A 规则匹配+yolo / B 模型语义判断 / C 原生全放行） | 按需（三选一） |
 | `@gotgenes/pi-subagents` | 子代理调度 | 必装 |
 | `@gotgenes/pi-subagents-worktrees` | 子代理 + worktree 协同 | 必装 |
 | `@juicesharp/rpiv-ask-user-question` | 结构化提问工具（访谈必备） | 必装 |

@@ -321,10 +321,19 @@ else echo "rpiv-ask-user-question: 未装"; fi
     - 默认 `prefix: "ctx "`、`suffix: ""`。让用户自定义文字，或保持默认。
 22. **扩展状态图标 `extensionStatusIcons`**？
     - 默认 `goal: ◎`、`mcp:*: ◈`。让用户自定义 emoji/字符，或保持默认，或删掉该段。
-23. **权限模式**？（pi-permission-system 的 `yoloMode`，决定第二行左边的状态指示）
-    - **自动放行模式 `yoloMode: true`**：未在白/黑名单匹配的命令自动放行，靠白名单放行只读命令 + 黑名单拦危险命令。状态栏显示 `🔌 yolo`。打扰最少，适合信任的本地开发环境。
-    - **保守模式 `yoloMode: false`**：未匹配命令默认弹出询问（需双击确认），状态栏显示非-yolo 标记。更安全，但每遇陌生命令都要你点一下。
-    - 让用户二选一。默认建议：本地开发选 `true`（自动放行），重要/共享机器选 `false`（保守）。
+23. **命令放行插件**？三选一（严格互斥，决定装哪个扩展、写哪个配置、后续问什么）：
+    - **A. `@gotgenes/pi-permission-system`（规则匹配，默认推荐）**：用 allow/ask/deny 规则逐条匹配命令（glob，last-match-wins），无匹配默认 `ask`。也管 path（跨工具横切，防 symlink 绕过）/external_directory/mcp/skill。零模型开销。可叠加 yoloMode 把所有 `ask` 自动放行（仅显式 `deny` + fail-closed 拦）。→ 选 A 后再问 J23b（yoloMode 开/关）。
+    - **B. `@ogulcancelik/pi-auto-permissions`（模型语义判断）**：守护模型读会话上下文逐条判断——用户在对话里授权过的命令自动放行、违反约束的拦、未明确授权的弹人工、高风险永远要确认。**只管 bash**（不管 path/external_directory）；每条 guarded 命令一次模型调用（有成本/延迟）。→ 选 B 后再问 J23b（reviewer 用哪个 provider/model + 哪些命令设 guarded）。
+    - **C. 不装**：pi 原生行为——**所有 bash/文件操作直接执行，无任何确认**（pi 不含内置 permission popups）。⚠️ 这是**最不安全**的（连 yolo 的 deny 兜底都没有），不是“每次问”；仅适合完全可信的隔离环境。
+    > A 与 B 严格二选一（都 gate bash，同装会双重弹窗）。默认建议 A（本地开发，规则 + deny 兜底 + 可选 yolo）。
+23b. **（J23=A 时）yoloMode 开/关**？
+    - 开：未匹配命令自动放行（仅 deny 拦），状态栏显示 `🔌 yolo`。打扰最少。
+    - 关：未匹配命令弹人工（双击确认），更安全但烦。
+    - 默认建议：本地开发选开，重要/共享机器选关。
+    **（J23=B 时）auto-permissions 配置**：
+    - reviewer 用哪个 provider/model（建议用低价 model，如 cannbot glm-5.2 或 flash）+ `reasoningEffort`/`timeoutMs`
+    - 哪些命令设 `guarded`（模型审）vs `convention`（直接拦）——通常危险动作（commit/push/publish/rm 等）设 guarded，约定违规设 convention
+    **（J23=C 时）**：无后续问题，不写配置文件。
 24. **后台任务更新检查**？（pi-background-tasks 第二行右边的 `🔌 bg ⬆ vX /bg-update`）
     - `开`（默认，会检测新版本并提示 `/bg-update`）
     - `关`（设环境变量 `PI_BG_DISABLE_UPDATE_CHECK=1`，footer 不再显示更新段；`PI_OFFLINE=1` 也会连带关闭）
@@ -437,6 +446,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 ```
 
 **packages 取舍规则**：
+- **命令放行插件（J23）**：A → 保留 `"npm:@gotgenes/pi-permission-system@25.0.0"`；B → 删该行、加 `"npm:@ogulcancelik/pi-auto-permissions"`；C → 删该行且不加替代。A 与 B 严格互斥，不能共存。
 - **状态栏模式（J16）**：基础 → 保留 `"npm:@narumitw/pi-statusline@0.49.6"`；高级 → 删该行、加 `"npm:@narumitw/pi-starship"`；不装 → 删该行且不加替代。基础与高级不能共存。
 - 用户不要语音 → 不变（rpiv-voice 本就不在清单里，默认不装）
 - 用户用 rtk → 追加 `"npm:pi-rtk-optimizer@0.9.0"`；用户要语音 → 追加 `"npm:@juicesharp/rpiv-voice@2.4.0"`
@@ -719,7 +729,11 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.10 `pi-permission-system/config.json` → `<HOME>/.pi/agent/extensions/pi-permission-system/config.json`
+### 3.10 命令放行配置 → 按 J23 分支
+
+> J23=A 写 pi-permission-system 配置；J23=B 写 pi-auto-permissions 配置；J23=C 不写任何文件（pi 原生全放行，最不安全）。
+
+#### 3.10a A：`pi-permission-system/config.json` → `<HOME>/.pi/agent/extensions/pi-permission-system/config.json`
 
 **先建目录**：`mkdir -p <HOME>/.pi/agent/extensions/pi-permission-system`
 
@@ -838,6 +852,36 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 - 用户不写 Rust（G12 不含 Rust）→ 删 `cargo test *`、`cargo check *`、`cargo fmt --all --check` 三条
 - `external_directory` 的 npm 路径用阶段 0 探测的 `npm root -g` 结果（绝对路径），让用户确认
 - `piInfrastructureReadPaths` 用 `~/.pi/agent/**` 跨平台，无需改
+- J23 选 A 且 yoloMode 关 → 把 `yoloMode` 设 `false`；开 → `true`（默认）
+
+#### 3.10b B：`pi-auto-permissions/config.json` → `<HOME>/.pi/agent/pi-auto-permissions/config.json`
+
+**先建目录**：`mkdir -p <HOME>/.pi/agent/pi-auto-permissions`
+
+```json
+{
+  "rules": [
+    { "pattern": "\\bgit\\s+commit\\b", "flags": "i", "level": "guarded", "group": "git", "label": "Git commit" },
+    { "pattern": "\\bgit\\s+push\\b", "flags": "i", "level": "guarded", "group": "git", "label": "Git push" },
+    { "pattern": "\\bnpm\\s+publish\\b|\\bpnpm\\s+publish\\b|\\bcargo\\s+publish\\b", "flags": "i", "level": "convention", "group": "publish", "label": "Publish", "message": "Use the configured release workflow." }
+  ],
+  "reviewer": {
+    "provider": "<J23b: 你的 provider，如 cannbot-dashscope>",
+    "model": "<J23b: 低价 model，如 glm-5.2>",
+    "reasoningEffort": "low",
+    "timeoutMs": 30000
+  }
+}
+```
+
+- `level: guarded` → 守护模型审；`level: convention` → 直接拦（配 `message` 反馈）
+- `pattern` 是 JS 正则；匹配的命令才审，不匹配的直接放行
+- 失败即拦（模型缺失/超时/无法解析 → 不自动放行）
+- **与 pi-permission-system 严格互斥**，二者都装会双重 gate bash
+
+#### 3.10c C：不装（无配置文件）
+
+J23=C 时不写任何权限配置文件，packages 也不加 permission 扩展。pi 用原生行为：所有 bash/文件操作直接执行，无确认、无 deny、无 yolo。仅适合完全可信的隔离环境。
 
 ---
 
@@ -900,7 +944,7 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
    - `.pi/agent/subagents.json`
    - `.pi/agent/hermes-memory-config.json`
    - `.pi/agent/pi-lsp.json`（若启用）
-   - `.pi/agent/extensions/pi-permission-system/config.json`
+   - `.pi/agent/extensions/pi-permission-system/config.json`（J23=A）或 `.pi/agent/pi-auto-permissions/config.json`（J23=B）
 3. **重启 pi**：让 pi 读取 `settings.json` 的 `packages` 自动 `npm install` 全部扩展。
 4. **装后验证**：
    - `gh auth status`（若用 gh）
@@ -968,7 +1012,8 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 | J20 | 模型名截断（开/关+长度+方向） | |
 | J21 | 上下文段 prefix/suffix | |
 | J22 | extensionStatusIcons 图标 | |
-| J23 | 权限模式 yoloMode（自动放行/保守） | |
+| J23 | 命令放行插件（A pi-permission-system / B pi-auto-permissions / C 不装） | |
+| J23b | A: yoloMode 开/关；B: reviewer provider/model + guarded/convention 规则；C: 无 | |
 | J24 | 后台任务更新检查（开/关） | |
 | K25 | MCP 接入方式（A 自动 / B 手动 / C CLI / D 不复用） | |
 
