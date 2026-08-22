@@ -18,8 +18,7 @@ node --version 2>/dev/null; npm --version 2>/dev/null
 pi --version 2>/dev/null
 gh --version 2>/dev/null && echo "gh: 已装" || echo "gh: 未装"
 code --version 2>/dev/null && echo "vscode: 已装" || echo "vscode: 未装"
-which bash
-# 探测其他 agent harness 的 skills 目录是否存在（供阶段 1 问 I 用）
+which bash# 探测其他 agent harness 的 skills 目录是否存在（供阶段 1 问 I 用）
 for d in ~/.claude/skills ~/.codex/skills ~/.agents/skills ~/.cursor/skills ~/.pi/agent/skills; do
   [ -d "$d" ] && echo "skills 源存在: $d" || echo "skills 源缺失: $d"
 done
@@ -322,9 +321,9 @@ else echo "rpiv-ask-user-question: 未装"; fi
 22. **扩展状态图标 `extensionStatusIcons`**？
     - 默认 `goal: ◎`、`mcp:*: ◈`。让用户自定义 emoji/字符，或保持默认，或删掉该段。
 23. **命令放行插件**？三选一（严格互斥，决定装哪个扩展、写哪个配置、后续问什么）：
-    - **A. `@gotgenes/pi-permission-system`（规则匹配，默认推荐）**：用 allow/ask/deny 规则逐条匹配命令（glob，last-match-wins），无匹配默认 `ask`。也管 path（跨工具横切，防 symlink 绕过）/external_directory/mcp/skill。零模型开销。可叠加 yoloMode 把所有 `ask` 自动放行（仅显式 `deny` + fail-closed 拦）。→ 选 A 后再问 J23b（yoloMode 开/关）。
-    - **B. `@ogulcancelik/pi-auto-permissions`（模型语义判断）**：守护模型读会话上下文逐条判断——用户在对话里授权过的命令自动放行、违反约束的拦、未明确授权的弹人工、高风险永远要确认。**只管 bash**（不管 path/external_directory）；每条 guarded 命令一次模型调用（有成本/延迟）。→ 选 B 后再问 J23b（reviewer 用哪个 provider/model + 哪些命令设 guarded）。
-    - **C. 不装**：pi 原生行为——**所有 bash/文件操作直接执行，无任何确认**（pi 不含内置 permission popups）。⚠️ 这是**最不安全**的（连 yolo 的 deny 兜底都没有），不是“每次问”；仅适合完全可信的隔离环境。
+    - **`@gotgenes/pi-permission-system`（规则匹配，默认推荐）**：用 allow/ask/deny 规则逐条匹配命令（glob，last-match-wins），无匹配默认 `ask`。也管 path（跨工具横切，防 symlink 绕过）/external_directory/mcp/skill。零模型开销。可叠加 yoloMode 把所有 `ask` 自动放行（仅显式 `deny` + fail-closed 拦）。→ 选 A 后再问 J23b（yoloMode 开/关）。
+    - **`@ogulcancelik/pi-auto-permissions`（模型语义判断）**：守护模型读会话上下文逐条判断——用户在对话里授权过的命令自动放行、违反约束的拦、未明确授权的弹人工、高风险永远要确认。**只管 bash**（不管 path/external_directory）；每条 guarded 命令一次模型调用（有成本/延迟）。→ 选 B 后再问 J23b（reviewer 用哪个 provider/model + 哪些命令设 guarded）。
+    - **不装**：pi 原生行为——**所有 bash/文件操作直接执行，无任何确认**（pi 不含内置 permission popups）。⚠️ 这是**最不安全**的（连 yolo 的 deny 兜底都没有），不是“每次问”；仅适合完全可信的隔离环境。
     > A 与 B 严格二选一（都 gate bash，同装会双重弹窗）。默认建议 A（本地开发，规则 + deny 兜底 + 可选 yolo）。
 23b. **（J23=A 时）yoloMode 开/关**？
     - 开：未匹配命令自动放行（仅 deny 拦），状态栏显示 `🔌 yolo`。打扰最少。
