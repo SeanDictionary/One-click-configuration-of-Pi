@@ -15,67 +15,48 @@
 https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%85%8D%E7%BD%AE%E6%8C%87%E5%8D%97.md
 ```
 
-### 作用
+### 会配置哪些内容（分部分）
 
-AI 读取指南后会分阶段完成一次性的 pi 全套配置，先访谈、后动手，路径绝不硬编码、保留既有配置。涉及的全部内容如下：
+指南先做环境探测 + 6 轮结构化访谈（provider/路径/工具/搜索/扩展/LSP/并发/skills/状态栏/权限/MCP），确认后再动手写文件，路径绝不硬编码、保留既有配置。配置内容按部分如下：
 
-- **阶段 0 · 环境探测（自动）**：检测 OS、架构、HOME、是否已装 pi/gh/vscode、各 harness 的 skills 目录是否存在、`rpiv-ask-user-question` 是否已装。
-- **阶段 0.5 · 确保结构化提问工具可用**：未装时自动安装 `@juicesharp/rpiv-ask-user-question`，让后续访谈能用带选项/预览/多选的结构化提问。
-- **阶段 1 · 用户访谈（6 轮 25 问）**，覆盖：
-  - A · Provider 与模型
-  - B · 路径（GitHub clone 缓存、npm 全局目录、Windows shellPath）
-  - C · 外部工具（VS Code、gh、代理）
-  - D · 搜索引擎（Exa / DuckDuckGo）
-  - E · 抓取行为（是否自动开浏览器）
-  - F · 扩展取舍（语音、rtk）
-  - G · LSP 语言（TS/JS、Rust）
-  - H · 并发与续轮（`maxConcurrent`、`continuationLimits`）
-  - I · Skills 来源（复用 Claude Code / Codex / Cursor 等的 skills 目录）
-  - J · 状态栏与权限模式（**基础/高级两种模式**：基础勾选段+配色/密度/分隔符/截断，高级用原生 starship TOML 模板 `$变量`+`($style)` 自由排版+`$fill`右对齐+多行+阈值变色；yoloMode、后台更新检查）
-  - K · MCP 接入（自动导入 / 手动导入 / 不复用）
-- **阶段 2 · 安装外部依赖**：按访谈结果跳过不用的，可能装 GitHub CLI、LSP server、VS Code。
-- **阶段 3 · 写入配置文件**：见下文清单。
-- **阶段 4 · 验证**：JSON 合法性校验、文件清单核对、重启 pi 自动安装扩展、provider 凭证配置。
+| 部分 | 文件 | 配什么 |
+|---|---|---|
+| **模型与 Provider** | `~/.pi/agent/models.json` | 自定义 provider（baseUrl/api/apiKey/compat/headers）+ 模型字段（id/contextWindow/maxTokens/thinkingLevelMap）+ **`cost` 费率**（美元/百万 token，不填则费用栏恒为 $0）。可选：AI 联网查官方定价自动填 |
+| **Pi 核心** | `~/.pi/agent/settings.json` | 主题、defaultProvider/Model、shellPath、externalEditor、扩展 packages、skills 来源、compaction、retry、并发、续轮、思考档 |
+| **联网** | `~/.pi/web-search.json` | 搜索/抓取路由、代理（ssrf）、GitHub clone 缓存、YouTube/PDF、autoOpenBrowser |
+| **状态栏** | `~/.pi/agent/pi-statusline.json` 或 `~/.pi/agent/pi-starship.toml` | 二选一：**基础模式**（JSON 勾选段+配色/密度/分隔符/截断）或 **高级模式**（原生 starship TOML，`$变量`+`($style)` 自由排版+`$fill`右对齐+多行+阈值变色+两步流程[先布局后样式]） |
+| **计划模式** | `~/.pi/agent/pi-plan-mode.json` | 思考档、计划期工具、safeSubcommands（git/gh 只读命令） |
+| **goal 续轮** | `~/.pi/agent/pi-goal.json` | 续轮上限（automaticTurns/noProgressTurns） |
+| **子代理** | `~/.pi/agent/subagents.json` | maxConcurrent、maxTurns、graceTurns、中断策略 |
+| **持久记忆** | `~/.pi/agent/hermes-memory-config.json` | 记忆策略、容量上限、会话搜索、自动整合 |
+| **LSP** | `~/.pi/agent/pi-lsp.json` | TS/JS、Rust 语言 server（按需，不写则不创建） |
+| **权限** | `~/.pi/agent/extensions/pi-permission-system/config.json` | yoloMode、敏感文件/危险命令拦截、只读白名单、external_directory |
+| **模型融合** | `~/.pi/agent/fusion-models.json` | 多候选并行+评分合并（可选，默认不创建） |
+| **后台更新检查** | 环境变量 | `PI_BG_DISABLE_UPDATE_CHECK`（可选，默认开） |
+| **MCP** | `~/.pi/agent/mcp.json` | 复用其他 harness 的 MCP server（可选，默认 off） |
 
-**写入 `settings.json` 的 packages（扩展）**：
+### 涉及的扩展
 
-| 包名 | 作用 |
-|---|---|
-| `@gotgenes/pi-permission-system` | 权限系统（yoloMode / 白名单 / 危险命令拦截） |
-| `@gotgenes/pi-subagents` | 子代理调度 |
-| `@gotgenes/pi-subagents-worktrees` | 子代理 + worktree 协同 |
-| `@juicesharp/rpiv-ask-user-question` | 结构化提问工具（访谈必备） |
-| `@juicesharp/rpiv-i18n` | 多语言支持 |
-| `@juicesharp/rpiv-todo` | 任务清单管理 |
-| `@narumitw/pi-github-pr` | GitHub PR 操作 |
-| `@narumitw/pi-goal` | goal 自动续轮 |
-| `@narumitw/pi-lsp` | LSP 语言服务集成（TS / Rust） |
-| `@narumitw/pi-plan-mode` | 计划模式 |
-| `@narumitw/pi-statusline` 或 `@narumitw/pi-starship` | 可定制状态栏（二选一：基础 JSON 勾选 / 高级 starship TOML 自由排版） |
-| `@narumitw/pi-worktree` | git worktree 管理 |
-| `pi-background-tasks` | 后台任务（带更新检查） |
-| `pi-hermes-memory` | 持久记忆系统 |
-| `pi-mcp-adapter` | MCP server 适配（可复用其他 harness 配置） |
-| `pi-web-access` | 联网搜索 / 抓取 / YouTube / PDF |
-
-可选扩展（按需追加）：`@juicesharp/rpiv-voice`（语音）、`pi-rtk-optimizer`（rtk 工具链）。
-
-**会写入的配置文件清单**（均位于 `~/.pi/` 下，路径跨平台）：
-
-| 文件 | 用途 |
-|---|---|
-| `~/.pi/agent/settings.json` | 主题、provider/model、shell、扩展 packages、skills 来源等 |
-| `~/.pi/web-search.json` | 搜索/抓取路由、GitHub clone、代理、YouTube/PDF 等 |
-| `~/.pi/agent/pi-statusline.json` 或 `~/.pi/agent/pi-starship.toml` | 状态栏配置（基础模式写 JSON，高级模式写 TOML；二选一，不共存） |
-| `~/.pi/agent/pi-plan-mode.json` | 计划模式思考档、安全子命令 |
-| `~/.pi/agent/pi-goal.json` | goal 续轮上限 |
-| `~/.pi/agent/subagents.json` | 子代理并发数与轮次 |
-| `~/.pi/agent/hermes-memory-config.json` | 持久记忆策略 |
-| `~/.pi/agent/pi-lsp.json` | LSP server（仅当选了 TS/Rust） |
-| `~/.pi/agent/extensions/pi-permission-system/config.json` | 权限白名单 / 黑名单 / yoloMode |
-| `~/.pi/agent/mcp.json` | MCP 自动导入（仅当选 A 时创建） |
-
-`fusion-models.json` 默认不创建，仅当用户明确要“模型融合”且能提供 ≥2 个 model id 时才生成。
+| 包名 | 作用 | 安装 |
+|---|---|---|
+| `@gotgenes/pi-permission-system` | 权限系统（yoloMode / 白名单 / 危险命令拦截） | 必装 |
+| `@gotgenes/pi-subagents` | 子代理调度 | 必装 |
+| `@gotgenes/pi-subagents-worktrees` | 子代理 + worktree 协同 | 必装 |
+| `@juicesharp/rpiv-ask-user-question` | 结构化提问工具（访谈必备） | 必装 |
+| `@juicesharp/rpiv-i18n` | 多语言支持 | 必装 |
+| `@juicesharp/rpiv-todo` | 任务清单管理 | 必装 |
+| `@narumitw/pi-github-pr` | GitHub PR 操作 | 按需（用 gh 才装） |
+| `@narumitw/pi-goal` | goal 自动续轮 | 必装 |
+| `@narumitw/pi-lsp` | LSP 语言服务集成（TS / Rust） | 按需（写对应语言才装） |
+| `@narumitw/pi-plan-mode` | 计划模式 | 必装 |
+| `@narumitw/pi-statusline` 或 `@narumitw/pi-starship` | 可定制状态栏（二选一） | 按需（要定制状态栏就装一个） |
+| `@narumitw/pi-worktree` | git worktree 管理 | 必装 |
+| `pi-background-tasks` | 后台任务（带更新检查） | 必装 |
+| `pi-hermes-memory` | 持久记忆系统 | 必装 |
+| `pi-mcp-adapter` | MCP server 适配（可复用其他 harness 配置） | 必装 |
+| `pi-web-access` | 联网搜索 / 抓取 / YouTube / PDF | 必装 |
+| `@juicesharp/rpiv-voice` | 语音输入/输出 | 可选 |
+| `pi-rtk-optimizer` | rtk 工具链 | 可选 |
 
 ---
 

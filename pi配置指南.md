@@ -23,6 +23,8 @@ which bash
 for d in ~/.claude/skills ~/.codex/skills ~/.agents/skills ~/.cursor/skills ~/.pi/agent/skills; do
   [ -d "$d" ] && echo "skills 源存在: $d" || echo "skills 源缺失: $d"
 done
+# 探测 models.json 是否已配 provider/model（供阶段 1 问 A1b 用）
+[ -f "$HOME/.pi/agent/models.json" ] && echo "models.json: 已存在" || echo "models.json: 无"
 # 探测 rpiv-ask-user-question 是否已安装（访谈要用的结构化提问工具）
 if [ -d "~/.pi/agent/npm/node_modules/@juicesharp/rpiv-ask-user-question" ]; then
   echo "rpiv-ask-user-question: 已装"
@@ -35,6 +37,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 - 判断 pi 是否已装、gh/vscode 是否已装
 - **skills 源存在/缺失清单** → 直接用于阶段 1 问题 I，已存在的源作为可选项提示用户
 - **rpiv-ask-user-question 是否已装** → 未装则先进阶段 0.5 安装它，再开始访谈
+- **models.json 是否已存在** → 存在则在阶段 1 问 A1b（是否查官方定价更新 cost）
 
 ---
 
@@ -56,7 +59,8 @@ else echo "rpiv-ask-user-question: 未装"; fi
 3. 保留用户既有的 `defaultProvider`/`defaultModel`/`shellPath`/`theme` 等字段不动，只动 `packages`。
 4. 写回 `settings.json`，用 `python -m json.tool` 校验合法。
 5. **提示用户重启 pi**：
-   > 请退出当前 pi 会话并重新打开（让 pi 重新读 settings.json 并 npm install 新扩展）。重启后**再次把这份指南交给 pi**，它会检测到 `ask_user_question` 已可用，直接进入阶段 1 访谈。
+   > **建议**退出重进后--resume重新打开当前会话；如果新开对话，一定要**再次把这份指南交给 pi**
+   > 请退出当前 pi 会话并重新打开（让 pi 重新读 settings.json 并 npm install 新扩展）。重启后它会检测到 `ask_user_question` 已可用，直接进入阶段 1 访谈。
 6. 本轮执行到此停止，等用户重启。
 
 ### 重启后恢复
@@ -86,6 +90,9 @@ else echo "rpiv-ask-user-question: 未装"; fi
 ### A. 模型与 Provider —— 属于第 1 轮
 1. 你用哪个 LLM provider + model？（例如 dashscope+glm、deepseek、anthropic+claude 等）
    - 需要用户提供：`defaultProvider`、`defaultModel` 的值，以及 API key 配置方式（pi 的 `/provider` 或 auth.json）。
+1b. **是否查官方定价并更新 `cost`**？（仅当阶段 0 探测到已有 `~/.pi/agent/models.json` 且含 provider+model 时才问）
+    - 是 → AI 联网查厂商官方定价（美元/百万 token），写入各 model 的 `cost` 字段（见 3.2）。不查则 `cost` 留空，footer 费用栏恒为 `$0.000`。
+    - 否 → 保留现状。
 
 ### B. 路径（必问，不能硬编码）—— 属于第 1 轮
 2. **GitHub clone 缓存目录**？抓 GitHub 仓库时存哪？
@@ -215,6 +222,10 @@ else echo "rpiv-ask-user-question: 未装"; fi
       - **背景色铺满行为**（取决于布局，设了 `bg:` 才需要考虑）：
         - **双侧布局（format 含 `$fill`）**：背景自动铺满全行——给 `[fill]` 设与各段相同的 `bg:#...`，`$fill` 撑开的空白就带背景，左右两块连成一整条。无需问用户。
         - **单侧布局（format 无 `$fill`）**：背景只在有文字的段出现，行尾留空。**必须问用户**：“背景铺满全行”还是“只随文字出现”。选“铺满”→ 在 format 末尾追加 `$fill` 并给 `[fill]` 设 `bg:#...`；选“只随文字”→ 不加 fill，各段背景各自为块。
+      - **能力边界（做不到的，别硬试）**：
+        - `cache` 模块**无阈值变色机制**（只有 format/symbol/style/disabled，没有 `display`）——`[[cache.display]]` 会被当未知字段忽略，命中率**只能整段一个色**，不能按 0-70/70-90 分档变色。
+        - `git_branch` 模块**无状态色机制**——要按 git 状态（ahead/behind/modified/untracked）变色，必须改用 `git_status` 模块（行内分段 `[$ahead](green)[$behind](red)[$modified](yellow)[$untracked](cyan)`，状态不命中时变量为空、该组不渲染）。这会改步骤1的模块集合，需回步骤1加 `git_status`。
+      - **Nerd Font 前置**：powerline 色块过渡符、相邻同色合并的衔接符需要 **Nerd Font** 字体。没装则色块仍生效但过渡处缺箭头（显示为方框或空白），不是配置坏了。基础模式的 dot/bar 分隔符无需 Nerd Font。
     > 基础模式只能从 7 个预设调色板里选一个 + 截断；高级模式能逐段、逐行内片段、逐阈值地控色，这是两者最大的能力差。
     - **示例模板**（用户可照此改，渲染约：` 📁 ~ 🌿 no-git 📊 6.7%/1.0m 94.5%/1.9m 💸 $0.000          cannbot-dashscope · 🤖 glm-5.2 high`）：
       ```toml
@@ -332,7 +343,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 
     - **pi 能自动读的路径**（仅当 A 开启时）：`~/.claude.json`、`~/.claude/mcp.json`、`~/.claude/claude_desktop_config.json`（Claude Code）；`~/.codex/config.toml`、`~/.codex/config.json`（Codex）；`~/.cursor/mcp.json`；`~/.windsurf/mcp.json`；`./.vscode/mcp.json`（项目级）；`~/.config/opencode/opencode.json`；以及通用标准 `~/.config/mcp/mcp.json`、`~/.agents/mcp.json`。
     - **默认推荐 A**：零配置同步、跨 harness 共用、不改外部文件。仅当用户明确不想让 pi 碰其他 harness 的配置时才选 D。
-    - 选 A 的写入见 3.12。选 B/C 的不写 mcp.json，由用户交互执行。
+    - 选 A 的写入见 3.13。选 B/C 的不写 mcp.json，由用户交互执行。
     - **提醒**：导入的 server 能否真正连上，取决于其启动命令在 PATH 中（如 `npx` 需 Node、`uvx` 需 `uv`、自定义 CLI 需自行安装）。pi 会尝试拉起，拉不起的会在 `/mcp` 里显示失败状态。
 
 > 访谈完成后，**先向用户复述一遍汇总的答案**（含 skills 源选择 + MCP 接入方式），确认无误再进入阶段 2。
@@ -440,7 +451,65 @@ else echo "rpiv-ask-user-question: 未装"; fi
 
 ---
 
-### 3.2 `web-search.json` → `<HOME>/.pi/web-search.json`（注意在 `.pi/` 下，不在 `.pi/agent/`）
+### 3.2 `models.json` → `<HOME>/.pi/agent/models.json`（provider/model 注册表 + 费用费率）
+
+> settings.json 的 `defaultProvider`/`defaultModel` 只是指向“用哪个”；**provider 怎么连、模型有哪些字段、每百万 token 多少钱，全在 models.json**。这个文件不写，`/provider` 命令也配不了自定义 provider 的费率和兼容性。
+
+**结构**：
+```json
+{
+  "providers": {
+    "<provider名>": {
+      "name": "<显示名>",
+      "baseUrl": "<API base URL>",
+      "api": "openai-completions",
+      "apiKey": "<明文 key 或 \"{env:VAR_NAME}\">",
+      "authHeader": true,
+      "headers": { "<自定义头>": "<值>" },
+      "compat": { "supportsDeveloperRole": false, "thinkingFormat": "deepseek" },
+      "models": [
+        {
+          "id": "<传给 API 的 model id>",
+          "name": "<显示名>",
+          "reasoning": true,
+          "input": ["text"],
+          "contextWindow": 1048576,
+          "maxTokens": 393216,
+          "thinkingLevelMap": { "minimal": null, "low": null, "medium": null, "high": "high", "max": "max" },
+          "cost": { "input": 1.32, "output": 3.96, "cacheRead": 0.044, "cacheWrite": 1.32 }
+        }
+      ]
+    }
+  }
+}
+```
+
+**字段说明**：
+- `api`：`openai-completions` / `openai-responses` / `azure-openai-responses` / `anthropic` 等，取决于 provider 兼容哪种。
+- `apiKey`：可明文，也可 `"{env:VAR_NAME}"` 引用环境变量（**推荐**，避免 key 进 git）。
+- `compat`：`supportsDeveloperRole`、`thinkingFormat`（`deepseek`/`qwen`）等兼容开关。
+- `thinkingLevelMap`：把 pi 的思考档映射到 provider 的值；某档设 `null` 表示“接受但透传空”。
+- **`cost`**：**美元 / 每百万 token** 费率。`input`=未命中缓存的输入、`output`=输出、`cacheRead`=缓存命中读取、`cacheWrite`=缓存写入。**省略则默认全零**。
+
+**`cost` 机制（务必读，否则会困惑“为什么费用是 0”）**：
+- pi 在**每条 assistant 消息生成完**时，用**当时** model 的 `cost` 费率 × `usage` token 数算出费用（`calculateCost(model, usage)`），**固化写进 session JSONL**。之后 footer 的 `$cost` 只是累加这些已存储值。
+- 因此：**models.json 加了 cost 之前的旧消息，cost 永远是 0**，不会回溯重算。`/reload` + 发新消息才开始按新费率累计；想要“从第一句就准”得开新 session。
+- 不填 `cost` → 所有消息 cost 全零 → footer 的 `$cost` 恒为 `$0.000`（哪怕 token 用量正常）。
+
+**定价来源（访谈 A1b 决定是否查）**：
+- 若目标设备**已有 models.json 且里面已有 provider+model**：问用户“是否要我联网查各模型官方最新定价并更新 `cost` 字段？”。
+  - 是 → AI 用 `web_search` 查厂商官方定价页（DeepSeek/GLM/Qwen/OpenAI/Anthropic/Google/xAI/MiniMax 等），取美元/百万 token 单价填入 `cost`。
+  - 否 → 保留现有 `cost`（可能为空/全零，费用栏恒为 $0）。
+- 若**没有 models.json**：按 A1 给的 provider+model 新建，`cost` 留空（用户事后可再让 AI 查价补）。
+
+**取舍规则**：
+- 保留用户既有 models.json 里的 provider/model/key，只按访谈增删或补 `cost`。
+- 多 provider 各自独立块；同一 model id 在不同 provider 下分别定义。
+- `apiKey` 强烈建议用 `"{env:VAR_NAME}"`，把 key 放环境变量，models.json 才能安全进 git。
+
+---
+
+### 3.3 `web-search.json` → `<HOME>/.pi/web-search.json`（注意在 `.pi/` 下，不在 `.pi/agent/`）
 
 ```json
 {
@@ -486,11 +555,11 @@ else echo "rpiv-ask-user-question: 未装"; fi
 
 ---
 
-### 3.3 状态栏配置 → `<HOME>/.pi/agent/` 下（按 J16 模式分支）
+### 3.4 状态栏配置 → `<HOME>/.pi/agent/` 下（按 J16 模式分支）
 
 > J16 选「基础模式」写 `pi-statusline.json`；选「高级模式」写 `pi-starship.toml`；选「不装」跳过本节、不写任何文件。两者只能存在其一。
 
-#### 3.3a 基础模式：`pi-statusline.json`（按 J16–J22 定制）
+#### 3.4a 基础模式：`pi-statusline.json`（按 J16–J22 定制）
 
 **全开示例**（供向用户展示用）：
 ```
@@ -523,7 +592,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 - J20 选“不截断” → 删掉 `segmentText.model` 整段。
 - J22 选“删掉” → 不写 `extensionStatusIcons` 字段（用扩展默认）。
 
-#### 3.3b 高级模式：`pi-starship.toml`（按 J16 高级模板流程）
+#### 3.4b 高级模式：`pi-starship.toml`（按 J16 高级模板流程）
 
 把用户在 J16 写的 `format` 模板 + `[模块]` 表原样写入 `<HOME>/.pi/agent/pi-starship.toml`。AI 补齐规则见 J16「AI 生成规则」。最小可用示例（即用户只给 `format` 一行时的默认落盘）：
 
@@ -539,7 +608,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.4 `pi-plan-mode.json` → `<HOME>/.pi/agent/pi-plan-mode.json`
+### 3.5 `pi-plan-mode.json` → `<HOME>/.pi/agent/pi-plan-mode.json`
 
 ```json
 {
@@ -558,7 +627,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.5 `pi-goal.json` → `<HOME>/.pi/agent/pi-goal.json`
+### 3.6 `pi-goal.json` → `<HOME>/.pi/agent/pi-goal.json`
 
 ```json
 {
@@ -574,7 +643,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.6 `subagents.json` → `<HOME>/.pi/agent/subagents.json`
+### 3.7 `subagents.json` → `<HOME>/.pi/agent/subagents.json`
 
 ```json
 {
@@ -589,7 +658,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.7 `hermes-memory-config.json` → `<HOME>/.pi/agent/hermes-memory-config.json`（原样，`~` 跨平台）
+### 3.8 `hermes-memory-config.json` → `<HOME>/.pi/agent/hermes-memory-config.json`（原样，`~` 跨平台）
 
 ```json
 {
@@ -621,7 +690,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.8 `pi-lsp.json` → `<HOME>/.pi/agent/pi-lsp.json`（按 G12 选语言）
+### 3.9 `pi-lsp.json` → `<HOME>/.pi/agent/pi-lsp.json`（按 G12 选语言）
 
 **只写用户要的语言对应的 server 段**：
 
@@ -650,7 +719,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.9 `pi-permission-system/config.json` → `<HOME>/.pi/agent/extensions/pi-permission-system/config.json`
+### 3.10 `pi-permission-system/config.json` → `<HOME>/.pi/agent/extensions/pi-permission-system/config.json`
 
 **先建目录**：`mkdir -p <HOME>/.pi/agent/extensions/pi-permission-system`
 
@@ -772,11 +841,11 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.10 `fusion-models.json` —— **默认不创建**
+### 3.11 `fusion-models.json` —— **默认不创建**
 
 仅在用户明确要"模型融合"（多候选并行+评分合并）且能提供 ≥2 个不同 model id 时才创建。默认跳过。
 
-### 3.11 后台任务更新检查（环境变量，仅当 J24=关时设置）
+### 3.12 后台任务更新检查（环境变量，仅当 J24=关时设置）
 
 pi-background-tasks 的 footer 更新提示（`🔌 bg ⬆ vX /bg-update`）由环境变量控制，不在 JSON 配置里。
 
@@ -791,7 +860,7 @@ export PI_BG_DISABLE_UPDATE_CHECK=1
 
 J24=开（默认）则什么都不做。
 
-### 3.12 `mcp.json` → `<HOME>/.pi/agent/mcp.json`（仅当第 6 轮 K25 选 A 时创建）
+### 3.13 `mcp.json` → `<HOME>/.pi/agent/mcp.json`（仅当第 6 轮 K25 选 A 时创建）
 
 pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery: "off"`）。选 A 才开启自动导入。
 
@@ -823,6 +892,7 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 1. **JSON 合法性**：对每个写好的 `.json` 跑 `python -m json.tool < file > /dev/null`，全 OK。
 2. **文件清单**：`find <HOME>/.pi -type f -name "*.json" | grep -v sessions | grep -v node_modules`，对照阶段 3 应有：
    - `.pi/agent/settings.json`
+   - `.pi/agent/models.json`（若写了 provider/费率）
    - `.pi/web-search.json`
    - `.pi/agent/pi-statusline.json`（基础模式）或 `.pi/agent/pi-starship.toml`（高级模式）
    - `.pi/agent/pi-plan-mode.json`
@@ -876,6 +946,7 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 | 编号 | 问题 | 用户答案 |
 |---|---|---|
 | A1 | provider + model | |
+| A1b | 是否查官方定价更新 cost（仅已有 models.json 时问） | |
 | B2 | github clone 缓存目录 | |
 | B3 | npm 全局 node_modules 路径 | |
 | B4 | shellPath（仅 Windows） | |
