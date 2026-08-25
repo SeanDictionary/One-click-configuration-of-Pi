@@ -43,16 +43,16 @@ https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%
 | `@gotgenes/pi-subagents` | 子代理调度 | 必装 |
 | `@gotgenes/pi-subagents-worktrees` | 子代理 + worktree 协同 | 必装 |
 | `@juicesharp/rpiv-ask-user-question` | 结构化提问工具（访谈必备） | 必装 |
-| `@juicesharp/rpiv-i18n` | 多语言支持 | 必装 |
+| `@juicesharp/rpiv-i18n` | 多语言支持 | 可选（需要多语言才装） |
 | `@juicesharp/rpiv-todo` | 任务清单管理 | 必装 |
 | `@narumitw/pi-github-pr` | GitHub PR 操作 | 按需（用 gh 才装） |
 | `@narumitw/pi-goal` | goal 自动续轮 | 必装 |
 | `@narumitw/pi-lsp` | LSP 语言服务集成（TS / Rust） | 按需（写对应语言才装） |
 | `@narumitw/pi-plan-mode` | 计划模式 | 必装 |
 | `@narumitw/pi-statusline` 或 `@narumitw/pi-starship` | 可定制状态栏（二选一） | 按需（要定制状态栏就装一个） |
-| `@narumitw/pi-worktree` | git worktree 管理 | 必装 |
-| `pi-background-tasks` | 后台任务（带更新检查） | 必装 |
-| `pi-hermes-memory` | 持久记忆系统 | 必装 |
+| `@narumitw/pi-worktree` | git worktree 管理 | 可选（需要 worktree 才装） |
+| `pi-background-tasks` | 后台任务（带更新检查） | 可选（需要后台任务才装） |
+| `pi-hermes-memory` | 持久记忆系统 | 可选（需要跨会话记忆才装） |
 | `pi-mcp-adapter` | MCP server 适配（可复用其他 harness 配置） | 必装 |
 | `pi-web-access` | 联网搜索 / 抓取 / YouTube / PDF | 必装 |
 | `@juicesharp/rpiv-voice` | 语音输入/输出 | 可选 |

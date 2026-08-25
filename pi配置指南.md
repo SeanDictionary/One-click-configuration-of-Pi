@@ -128,12 +128,19 @@ else echo "rpiv-ask-user-question: 未装"; fi
     - 不需要 → 从 packages 删除（默认不装）
 11. **是否使用 rtk 工具链**？（`pi-rtk-optimizer`）
     - 默认不装。仅当用户明确说在用 rtk 时才装，并在 permission 配置里加回 rtk 命令条目。
+    - **另：以下 6 个扩展均为选装**（默认不在 packages 里，逐项问用户是否需要；需要才按下方「packages 取舍规则」追加）：
+        - **多语言支持** `@juicesharp/rpiv-i18n`（需要 pi 界面/输出多语言才装）
+        - **git worktree 管理** `@narumitw/pi-worktree`（需要 worktree 多分支并行才装）
+        - **后台任务** `pi-background-tasks`（需要长任务后台运行 + 更新检查才装，详见 Q24）
+        - **持久记忆** `pi-hermes-memory`（需要跨会话记忆才装）
+        - **LSP 语言服务** `@narumitw/pi-lsp`（按 G12 选语言，写 TS/Rust 才装）
+        - **GitHub PR** `@narumitw/pi-github-pr`（按 Q6 用 gh 才装）
 
 ### G. LSP 语言—— 属于第 3 轮
-12. **日常写哪些语言**？（决定 `pi-lsp.json` 配几个 server + 装哪个 LSP）
+12. **日常写哪些语言**？（决定 `pi-lsp.json` 配几个 server + 是否装 `@narumitw/pi-lsp`）
     - TypeScript/JS → 保留 typescript 段，需 `npm i -g typescript-language-server typescript`
     - Rust → 保留 rust-analyzer 段，需 `rustup component add rust-analyzer`
-    - 都不写 → 不创建 pi-lsp.json，且从 packages 删 `@narumitw/pi-lsp`
+    - 都不写 → 不创建 pi-lsp.json，且不加 `@narumitw/pi-lsp` 到 packages
 
 ### H. 并发与轮次（性能/预算相关）—— 属于第 4 轮
 13. **子代理并发数** `maxConcurrent`？
@@ -333,10 +340,10 @@ else echo "rpiv-ask-user-question: 未装"; fi
     - reviewer 用哪个 provider/model（建议用低价 model，如 cannbot glm-5.2 或 flash）+ `reasoningEffort`/`timeoutMs`
     - 哪些命令设 `guarded`（模型审）vs `convention`（直接拦）——通常危险动作（commit/push/publish/rm 等）设 guarded，约定违规设 convention
     **（J23=C 时）**：无后续问题，不写配置文件。
-24. **后台任务更新检查**？（pi-background-tasks 第二行右边的 `🔌 bg ⬆ vX /bg-update`）
-    - `开`（默认，会检测新版本并提示 `/bg-update`）
-    - `关`（设环境变量 `PI_BG_DISABLE_UPDATE_CHECK=1`，footer 不再显示更新段；`PI_OFFLINE=1` 也会连带关闭）
-    - 让用户选。默认建议开（能及时知道有更新）。
+24. **后台任务**？（`pi-background-tasks` 现为选装扩展）
+    - **不装** → 不加该包到 packages，跳过更新检查问题（footer 不显后台任务段）。
+    - **装** → 继续问更新检查：`开`（默认，footer 显示 `🔌 bg ⬆ vX /bg-update`）/`关`（设环境变量 `PI_BG_DISABLE_UPDATE_CHECK=1`，或 `PI_OFFLINE=1` 连带关闭更多联网检查）。
+    - 默认建议：装 + 开（能及时知道有更新、长任务可后台跑）。
 
 ### K. MCP 接入（第 6 轮）
 
@@ -428,16 +435,10 @@ else echo "rpiv-ask-user-question: 未装"; fi
     "npm:@gotgenes/pi-subagents@19.2.2",
     "npm:@gotgenes/pi-subagents-worktrees@0.3.0",
     "npm:@juicesharp/rpiv-ask-user-question@2.4.0",
-    "npm:@juicesharp/rpiv-i18n@2.4.0",
     "npm:@juicesharp/rpiv-todo@2.4.0",
-    "npm:@narumitw/pi-github-pr@0.49.3",
     "npm:@narumitw/pi-goal@0.51.0",
-    "npm:@narumitw/pi-lsp@0.49.4",
     "npm:@narumitw/pi-plan-mode@0.49.3",
     "npm:@narumitw/pi-statusline@0.49.6",
-    "npm:@narumitw/pi-worktree@0.50.0",
-    "npm:pi-background-tasks@2.3.0",
-    "npm:pi-hermes-memory@0.9.4",
     "npm:pi-mcp-adapter@2.23.0",
     "npm:pi-web-access@0.22.0"
   ]
@@ -449,8 +450,13 @@ else echo "rpiv-ask-user-question: 未装"; fi
 - **状态栏模式（J16）**：基础 → 保留 `"npm:@narumitw/pi-statusline@0.49.6"`；高级 → 删该行、加 `"npm:@narumitw/pi-starship"`；不装 → 删该行且不加替代。基础与高级不能共存。
 - 用户不要语音 → 不变（rpiv-voice 本就不在清单里，默认不装）
 - 用户用 rtk → 追加 `"npm:pi-rtk-optimizer@0.9.0"`；用户要语音 → 追加 `"npm:@juicesharp/rpiv-voice@2.4.0"`
-- 用户不写任何 LSP 语言 → 从清单删 `"npm:@narumitw/pi-lsp@0.49.4"`
-- 用户不用 GitHub → 可删 `"npm:@narumitw/pi-github-pr@0.49.3"`（可选）
+- **以下 6 个扩展均为选装（默认不在清单里，逐项问用户是否需要，需要才追加）：**
+  - **LSP 语言服务**（按 G12）：写了 TS/JS → 追加 `"npm:@narumitw/pi-lsp@0.49.4"`；都不写 → 不加。
+  - **GitHub PR**（按 Q6）：用户用 gh → 追加 `"npm:@narumitw/pi-github-pr@0.49.3"`；不用 → 不加。
+  - **多语言支持**（`@juicesharp/rpiv-i18n`）：用户需要界面/输出多语言 → 追加 `"npm:@juicesharp/rpiv-i18n@2.4.0"`；不需要 → 不加（pi 默认英文界面）。
+  - **git worktree 管理**（`@narumitw/pi-worktree`）：用户需要 worktree 多分支并行 → 追加 `"npm:@narumitw/pi-worktree@0.50.0"`；不需要 → 不加。
+  - **后台任务**（`pi-background-tasks`）：用户需要长任务后台运行 + 更新检查 → 追加 `"npm:pi-background-tasks@2.3.0"`；不需要 → 不加。
+  - **持久记忆**（`pi-hermes-memory`）：用户需要跨会话持久记忆 → 追加 `"npm:pi-hermes-memory@0.9.4"`；不需要 → 不加。
 
 **skills 取舍规则**：
 - `enableSkillCommands: true` 固定写（启用 `/skill:name` 斜杠命令）。
@@ -667,7 +673,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.8 `hermes-memory-config.json` → `<HOME>/.pi/agent/hermes-memory-config.json`（原样，`~` 跨平台）
+### 3.8 `hermes-memory-config.json` → `<HOME>/.pi/agent/hermes-memory-config.json`（选装：仅当装了 `pi-hermes-memory` 才写；`~` 跨平台）
 
 ```json
 {
@@ -699,7 +705,7 @@ $brand$model$thinking$directory$git_branch$git_status$activity$context$time"""
 
 ---
 
-### 3.9 `pi-lsp.json` → `<HOME>/.pi/agent/pi-lsp.json`（按 G12 选语言）
+### 3.9 `pi-lsp.json` → `<HOME>/.pi/agent/pi-lsp.json`（选装：仅当装了 `@narumitw/pi-lsp` 且按 G12 选语言才写）
 
 **只写用户要的语言对应的 server 段**：
 
@@ -941,8 +947,8 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
    - `.pi/agent/pi-plan-mode.json`
    - `.pi/agent/pi-goal.json`
    - `.pi/agent/subagents.json`
-   - `.pi/agent/hermes-memory-config.json`
-   - `.pi/agent/pi-lsp.json`（若启用）
+   - `.pi/agent/hermes-memory-config.json`（若装 `pi-hermes-memory`）
+   - `.pi/agent/pi-lsp.json`（若装 `@narumitw/pi-lsp`）
    - `.pi/agent/extensions/pi-permission-system/config.json`（J23=A）或 `.pi/agent/pi-auto-permissions/config.json`（J23=B）
 3. **重启 pi**：让 pi 读取 `settings.json` 的 `packages` 自动 `npm install` 全部扩展。
 4. **装后验证**：
@@ -1024,5 +1030,5 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 2. **路径绝不硬编码**：阶段 0 探测 + 阶段 1 确认，能 `~` 就 `~`，必须绝对路径的才用用户指定值。
 3. **每写完一个文件立即校验 JSON**。
 4. **保留用户既有配置**：若目标设备已有 settings.json 中的 provider/model/shell 等，保留这些值，只合并本指南的行为参数与 packages。
-5. **取舍清晰**：packages、pi-lsp、pi-plan-mode 的 gh 段、permission 的 rtk/cargo 条目，严格按访谈结果增删。
+5. **取舍清晰**：packages、pi-lsp、pi-plan-mode 的 gh 段、permission 的 rtk/cargo 条目，以及 6 个选装扩展（i18n/worktree/background-tasks/hermes-memory/pi-lsp/pi-github-pr）是否追加，严格按访谈结果增删。
 6. **最后向用户报告**：列出实际写入的文件清单、跳过的项、需要用户手动完成的剩余步骤（如 `gh auth login`、`/provider` 配 key）。
