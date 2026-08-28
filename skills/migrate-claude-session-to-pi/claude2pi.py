@@ -2,10 +2,11 @@
 """Convert a Claude Code session JSONL to a pi session JSONL.
 
 Strategy: summary (programmatically extracted) + recent conversation (mapped tool calls,
-thinking dropped, tool results truncated).
+thinking dropped, tool results truncated). Everything is derived from the source session
+or pi settings — nothing about the original project/model is hard-coded.
 """
 import json, uuid, re, os, sys
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from datetime import datetime, timezone
 
 NOISE_PATTERNS = [
@@ -20,21 +21,23 @@ NOISE_PATTERNS = [
 ]
 NOISE_RE = re.compile("|".join(NOISE_PATTERNS))
 
+
 def is_noise(s):
     if not s:
         return True
     return bool(NOISE_RE.search(s))
 
+
 # --- defaults: src/cwd required; provider/model/thinking auto-detected from pi settings ---
 def _pi_setting(key, default=None):
-    import json as _json, os as _os
-    p = _os.path.expanduser("~/.pi/agent/settings.json")
+    p = os.path.expanduser("~/.pi/agent/settings.json")
     try:
         with open(p, encoding="utf-8") as fh:
-            s = _json.load(fh)
+            s = json.load(fh)
         return s.get(key, default)
     except Exception:
         return default
+
 
 _DEFAULT_PROVIDER = _pi_setting("defaultProvider") or ""
 _DEFAULT_MODEL = _pi_setting("defaultModel") or ""
@@ -43,7 +46,7 @@ _DEFAULT_THINKING = _pi_setting("defaultThinkingLevel") or "medium"
 import argparse
 _ap = argparse.ArgumentParser(
     description="Migrate a Claude Code session JSONL to a pi session JSONL (summary + recent, mapped tools).",
-    epilog="Example: python claude2pi.py ~/.claude/projects/d--myproj/abc.jsonl /d/Proj --cutoff 2026-08-01")
+    epilog='Example: python claude2pi.py ~/.claude/projects/d--myproj/abc.jsonl /d/Proj --cutoff 2026-08-01')
 _ap.add_argument("src", help="Claude session .jsonl path (e.g. ~/.claude/projects/<enc-cwd>/<uuid>.jsonl)")
 _ap.add_argument("cwd", help="target working directory for the pi session")
 _ap.add_argument("--cutoff", default="",
@@ -51,19 +54,26 @@ _ap.add_argument("--cutoff", default="",
 _ap.add_argument("--provider", default=_DEFAULT_PROVIDER, help="pi provider id (default: from pi settings)")
 _ap.add_argument("--model", default=_DEFAULT_MODEL, help="pi model id (default: from pi settings)")
 _ap.add_argument("--thinking", default=_DEFAULT_THINKING, help="thinking level (default: from pi settings)")
-_args = _ap.parse_args()
+_ap.add_argument("--out-dir", default="",
+                 help="output directory (default: pi default session dir for <cwd>, i.e. ~/.pi/agent/sessions/--<encoded-cwd>--)")
+_ap.add_argument("--language", default="en",
+                 help="language of the generated summary text: 'en' (default) or 'zh'. Does not affect the migrated conversation content.")
+args = _ap.parse_args()
 
-SRC = _args.src
-CWD = _args.cwd
-CUTOFF = _args.cutoff
-PROVIDER = _args.provider
-MODEL_ID = _args.model
-THINKING_LEVEL = _args.thinking
+SRC = args.src
+CWD = args.cwd
+CUTOFF = args.cutoff
+PROVIDER = args.provider
+MODEL_ID = args.model
+THINKING_LEVEL = args.thinking
+OUT_DIR_ARG = args.out_dir
+LANG = args.language if args.language in ("en", "zh") else "en"
 
-# truncation
+# truncation (chars)
 TR_TOOLRESULT = 500      # cap each tool result text
 TR_AITEXT_RECENT = 3000  # cap assistant text in recent block
 TR_AITEXT_SUMM = 220     # cap assistant text in summary "key progress"
+
 
 # ---- read source ----
 raw = []
@@ -80,6 +90,15 @@ with open(SRC, encoding="utf-8") as fh:
 
 # keep only user/assistant, in file order (chronological)
 msgs = [o for o in raw if o.get("type") in ("user", "assistant")]
+
+# source session id (first line carrying a sessionId / uuid), used only for the summary header
+SOURCE_SESSION_ID = ""
+for o in raw:
+    sid = o.get("sessionId") or o.get("uuid")
+    if sid:
+        SOURCE_SESSION_ID = sid
+        break
+
 
 # ---- group into turns ----
 # assistant lines with same message.id belong to one turn (streaming deltas).
@@ -100,8 +119,8 @@ while i < n:
             i += 1
         # merge content blocks
         text_parts = []
-        thinking_parts = []  # dropped, but collect to know
-        tool_uses = []  # list of (block)
+        thinking_parts = []  # dropped, but tracked
+        tool_uses = []
         for L in lines_grp:
             c = L.get("message", {}).get("content")
             if isinstance(c, list):
@@ -114,7 +133,6 @@ while i < n:
                     elif t == "thinking":
                         thinking_parts.append(b.get("thinking", ""))
                     elif t == "tool_use":
-                        # dedup by id (a tool_use may appear once when complete)
                         tu = {"id": b.get("id"), "name": b.get("name"), "input": b.get("input", {})}
                         tool_uses.append(tu)
             elif isinstance(c, str):
@@ -170,7 +188,6 @@ print(f"total turns: {len(turns)}", file=sys.stderr)
 
 # ---- split summary vs recent ----
 if not CUTOFF:
-    # keep everything as recent conversation; no summary
     recent_idx = 0
 else:
     recent_idx = None
@@ -184,8 +201,31 @@ summary_turns = turns[:recent_idx]
 recent_turns = turns[recent_idx:]
 print(f"summary turns: {len(summary_turns)}  recent turns: {len(recent_turns)}", file=sys.stderr)
 
+
+# ---- localized summary section headers ----
+def L(en, zh):
+    return zh if LANG == "zh" else en
+
+
+H_TITLE = L("Migrated session (from Claude Code)",
+            "会话迁移说明（来自 Claude Code）")
+H_INTRO = L(
+    "This session was migrated from a Claude Code session. Early history is condensed below "
+    "into a structured summary; the recent conversation is kept in full. Thinking blocks were "
+    "dropped and tool results truncated.",
+    f"本会话原始来源：Claude Code 会话 `{SOURCE_SESSION_ID or '(unknown)'}`，工作目录 `{CWD}`。"
+    f"以下为历史摘要 + 近期完整对话，由脚本自动迁移。早期历史中的 thinking 块已省略，工具结果已截断。")
+H_AGENT = L("Project context (first real user message)", "AGENT.md（项目操作约定）")
+H_TIMELINE = L("User prompt timeline", "用户需求时间线")
+H_FILES = L("Files touched", "涉及文件")
+H_PROGRESS = L("Key progress (by time)", "关键进展摘要（按时间）")
+H_STATUS = L("Last status (most recent substantive assistant reply)", "最近状态（最近一条实质性助手回复）")
+H_DIVIDER = L("Below is the recent full conversation (tool calls mapped to pi tools, results truncated).",
+              "以下为近期完整对话（工具调用已映射为 pi 工具，结果已截断）。")
+
+
 # ---- build summary text ----
-# 1. AGENT.md (first real user message)
+# 1. project context (first real user message)
 agent_md = ""
 for t in summary_turns:
     if t["kind"] == "user" and t["is_real_user"]:
@@ -199,7 +239,6 @@ for t in turns:
         s = t["text"].strip()
         if not s or is_noise(s):
             continue
-        # skip skill-launch boilerplate
         if s.startswith("Base directory for this skill"):
             s = "[skill: " + s.split("\n")[0].replace("Base directory for this skill: ", "") + "]"
         ts = (t["ts"] or "")[:19]
@@ -219,13 +258,14 @@ for t in turns:
             if p:
                 files[nm].add(p)
 
-# group files by directory
+
 def group_files(paths):
     bydir = defaultdict(list)
     for p in sorted(paths):
         d = os.path.dirname(p).replace("\\", "/")
         bydir[d].append(os.path.basename(p))
     return bydir
+
 
 all_files = set().union(*files.values()) if files else set()
 
@@ -240,8 +280,7 @@ for t in summary_turns:
     ts = (t["ts"] or "")[:19]
     key_progress.append((ts, txt[:TR_AITEXT_SUMM]))
 
-# 5. last substantive assistant text (current status) — prefer a non-noise reply
-# near the end of the summary region (the real progress report)
+# 5. last substantive assistant text (current status)
 last_status = ""
 for t in reversed(summary_turns):
     if t["kind"] == "assistant":
@@ -255,40 +294,39 @@ if not last_status:
             last_status = t["text"].strip()
             break
 
+
 # ---- assemble summary message ----
 parts = []
-parts.append("# 会话迁移说明（来自 Claude Code）\n")
-parts.append(f"本会话原始来源：Claude Code 会话 `ed193800-284a-4c78-8cdd-d0712fc502d0`，"
-             f"使用模型 gpt-5.5-2026-04-23，工作目录 `{CWD}`。"
-             f"以下为历史摘要 + 近期完整对话，由脚本自动迁移。"
-             f"早期历史中的 thinking 块已省略，工具结果已截断。\n")
+parts.append(f"# {H_TITLE}\n\n")
+parts.append(f"{H_INTRO}\n")
 
-parts.append("\n## AGENT.md（项目操作约定）\n")
+parts.append(f"\n## {H_AGENT}\n\n")
 parts.append(agent_md.strip() + "\n")
 
-parts.append("\n## 用户需求时间线\n")
+parts.append(f"\n## {H_TIMELINE}\n")
 for ts, s in user_prompts:
     parts.append(f"- `{ts}` {s}\n")
 
-parts.append(f"\n## 涉及文件（共 {len(all_files)} 个，按工具）\n")
+parts.append(f"\n## {H_FILES} ({len(all_files)})\n")
 for nm in ("Read", "Edit", "Write"):
     if nm in files:
         bydir = group_files(files[nm])
-        parts.append(f"\n### {nm}（{len(files[nm])}）\n")
+        parts.append(f"\n### {nm} ({len(files[nm])})\n")
         for d in sorted(bydir):
             parts.append(f"- `{d}/`: {', '.join(bydir[d])}\n")
 
-parts.append("\n## 关键进展摘要（按时间）\n")
+parts.append(f"\n## {H_PROGRESS}\n")
 for ts, s in key_progress:
     parts.append(f"- `{ts}` {s}\n")
 
-parts.append("\n## 最近状态（最近一条实质性助手回复）\n")
-parts.append((last_status or "(无)") + "\n")
+parts.append(f"\n## {H_STATUS}\n")
+parts.append((last_status or "(none)") + "\n")
 
-parts.append("\n---\n以下为近期完整对话（工具调用已映射为 pi 工具，结果已截断）。\n")
+parts.append(f"\n---\n{H_DIVIDER}\n")
 
 summary_text = "".join(parts)
 print(f"summary text chars: {len(summary_text)}", file=sys.stderr)
+
 
 # ---- tool name mapping ----
 TOOL_MAP = {
@@ -301,26 +339,34 @@ TOOL_MAP = {
     "Glob": "bash",
 }
 
+
 def map_tool_name(nm):
     return TOOL_MAP.get(nm, nm)  # keep mcp__/Skill/etc as-is
+
 
 def trunc(s, n):
     if len(s) <= n:
         return s
-    return s[:n] + f"\n…[已截断,原 {len(s)} 字符]"
+    return s[:n] + f"\n…[truncated, {len(s)} chars original]"
+
 
 # ---- build pi entries ----
 def now_iso():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + f"{datetime.now(timezone.utc).microsecond//1000:03d}Z"
+    dt = datetime.now(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
+
 
 def gen_id():
     return uuid.uuid4().hex[:8]
 
+
 def gen_uuid():
     return str(uuid.uuid4())
 
+
 session_id = gen_uuid()
 start_iso = now_iso()
+seq_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 entries = []
 
 # header
@@ -331,7 +377,7 @@ tl_id = gen_id()
 entries.append({"type": "thinking_level_change", "id": tl_id, "parentId": mc_id, "timestamp": start_iso, "thinkingLevel": THINKING_LEVEL})
 
 prev = tl_id
-seq_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+
 
 def emit_user_text(text, ts_iso, ts_ms):
     global prev
@@ -340,6 +386,7 @@ def emit_user_text(text, ts_iso, ts_ms):
          "message": {"role": "user", "content": [{"type": "text", "text": text}], "timestamp": ts_ms}}
     entries.append(e)
     prev = eid
+
 
 def emit_assistant(text, tool_calls, ts_iso, ts_ms, model):
     global prev
@@ -353,7 +400,7 @@ def emit_assistant(text, tool_calls, ts_iso, ts_ms, model):
         blocks = [{"type": "text", "text": ""}]
     has_tools = bool(tool_calls)
     msg = {"role": "assistant", "content": blocks, "api": "openai-completions",
-           "provider": "claude", "model": model or "gpt-5.5-2026-04-23",
+           "provider": PROVIDER, "model": model or MODEL_ID,
            "usage": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0,
                      "reasoning": 0, "totalTokens": 0,
                      "cost": {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "total": 0}},
@@ -366,6 +413,7 @@ def emit_assistant(text, tool_calls, ts_iso, ts_ms, model):
     prev = eid
     return eid
 
+
 def emit_tool_result(tool_call_id, tool_name, text, is_error, ts_iso, ts_ms):
     global prev
     eid = gen_id()
@@ -375,20 +423,19 @@ def emit_tool_result(tool_call_id, tool_name, text, is_error, ts_iso, ts_ms):
     entries.append(e)
     prev = eid
 
+
 def to_iso(ts):
-    if not ts:
-        return start_iso
-    return ts
+    return ts if ts else start_iso
+
 
 def to_ms(ts):
-    nonlocal_var = ts
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         return int(dt.timestamp() * 1000)
     except Exception:
         return seq_ms
 
-# emit summary as a single user message
+
 # emit summary as a single user message (skip if no summary region)
 if summary_turns:
     emit_user_text(summary_text, start_iso, seq_ms)
@@ -417,19 +464,24 @@ for t in recent_turns:
         tcs = []
         for tu in t["tool_uses"]:
             nm = map_tool_name(tu["name"])
-            args = tu["input"] if isinstance(tu["input"], dict) else {"_raw": tu["input"]}
-            tcs.append({"id": tu["id"] or gen_id(), "name": nm, "arguments": args})
+            a = tu["input"] if isinstance(tu["input"], dict) else {"_raw": tu["input"]}
+            tcs.append({"id": tu["id"] or gen_id(), "name": nm, "arguments": a})
         emit_assistant(text, tcs, ts_iso, ts_ms, t.get("model"))
 
-# write
-out_dir = os.path.expanduser("~/.pi/agent/sessions/--D--Github-SeanBlog-Frame--")
+
+# ---- output path: pi default session dir for <cwd> (or explicit --out-dir) ----
+def default_session_dir(cwd):
+    """Mirror pi's getDefaultSessionDirPath: --<cwd stripped of leading sep, / \\ : -> ->--."""
+    stripped = re.sub(r"^[/\\]", "", os.path.abspath(cwd))
+    safe = re.sub(r"[/\\:]", "-", stripped)
+    return os.path.join(os.path.expanduser("~/.pi/agent/sessions"), f"--{safe}--")
+
+
+out_dir = OUT_DIR_ARG or default_session_dir(CWD)
 os.makedirs(out_dir, exist_ok=True)
-fname_ts = start_iso.replace(":", "-").replace(".", "-")
+fname_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S-") + \
+    f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
 out_path = os.path.join(out_dir, f"{fname_ts}_{session_id}.jsonl")
-# filename timestamp format matches pi: 2026-08-21T09-02-20-015Z_uuid
-# reconstruct proper format
-fname_ts2 = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S-") + f"{datetime.now(timezone.utc).microsecond//1000:03d}Z"
-out_path = os.path.join(out_dir, f"{fname_ts2}_{session_id}.jsonl")
 
 with open(out_path, "w", encoding="utf-8") as fh:
     for e in entries:
@@ -437,7 +489,7 @@ with open(out_path, "w", encoding="utf-8") as fh:
 
 total = os.path.getsize(out_path)
 print(f"\nOUTPUT: {out_path}", file=sys.stderr)
-print(f"entries: {len(entries)}  size: {total} bytes ({total/1024:.1f} KB)", file=sys.stderr)
+print(f"entries: {len(entries)}  size: {total} bytes ({total / 1024:.1f} KB)", file=sys.stderr)
 # breakdown
 kinds = defaultdict(int)
 for e in entries:
