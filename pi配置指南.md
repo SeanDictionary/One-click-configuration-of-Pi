@@ -22,6 +22,10 @@ which bash# 探测其他 agent harness 的 skills 目录是否存在（供阶段
 for d in ~/.claude/skills ~/.codex/skills ~/.agents/skills ~/.cursor/skills ~/.pi/agent/skills; do
   [ -d "$d" ] && echo "skills 源存在: $d" || echo "skills 源缺失: $d"
 done
+# 探测其他 harness 的 MCP 配置是否存在（供阶段 1 问 K25 用）
+for f in ~/.claude.json ~/.claude/mcp.json ~/.codex/config.toml ~/.codex/config.json ~/.cursor/mcp.json ~/.windsurf/mcp.json ~/.config/opencode/opencode.json ~/.config/mcp/mcp.json ~/.agents/mcp.json; do
+  [ -f "$f" ] && echo "MCP 配置源存在: $f"
+done
 # 探测 models.json 是否已配 provider/model（供阶段 1 问 A1b 用）
 [ -f "$HOME/.pi/agent/models.json" ] && echo "models.json: 已存在" || echo "models.json: 无"
 # 探测 rpiv-ask-user-question 是否已安装（访谈要用的结构化提问工具）
@@ -35,6 +39,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 - `HOME` → 用户主目录，后续所有 `~` 都展开成它
 - 判断 pi 是否已装、gh/vscode 是否已装
 - **skills 源存在/缺失清单** → 直接用于阶段 1 问题 I，已存在的源作为可选项提示用户
+- **MCP 配置源存在清单** → 直接用于阶段 1 问题 K25；有存在的才推荐选 A 迁移，一个都没有则推荐 B 手动添加
 - **rpiv-ask-user-question 是否已装** → 未装则先进阶段 0.5 安装它，再开始访谈
 - **models.json 是否已存在** → 存在则在阶段 1 问 A1b（是否查官方定价更新 cost）
 
@@ -54,7 +59,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 ### 安装步骤（未装时）
 
 1. 读取现有 `<HOME>/.pi/agent/settings.json`（不存在则视为 `{}`）。
-2. 确保 `packages` 数组里包含 `"npm:@juicesharp/rpiv-ask-user-question@2.4.0"`；若已有 `packages` 就追加这一项（去重），没有就新建。
+2. 确保 `packages` 数组里包含 `"npm:@juicesharp/rpiv-ask-user-question@2.12.0"`；若已有 `packages` 就追加这一项（去重），没有就新建。
 3. 保留用户既有的 `defaultProvider`/`defaultModel`/`shellPath`/`theme` 等字段不动，只动 `packages`。
 4. 写回 `settings.json`，用 `python -m json.tool` 校验合法。
 5. **提示用户重启 pi**：
@@ -82,7 +87,7 @@ else echo "rpiv-ask-user-question: 未装"; fi
 - **第 3 轮 · 扩展与语言取舍**：F10 + F11 + G12（语音/rtk/LSP 语言）
 - **第 4 轮 · 性能与 Skills**：H13 + H14 + I15（并发/轮数/skills 源）
 - **第 5 轮 · 状态栏与权限模式**：J16–J24（状态栏模式选择[基础/高级/不装] + 基础模式段/配色/密度/截断/上下文前缀/图标或高级模式 starship 模板 + 权限模式 + 后台更新检查）
-- **第 6 轮 · MCP 接入**：K25（是否复用其他 harness 的 MCP 配置、用哪种方式）
+- **第 6 轮 · MCP 接入**：K25（是否需要 MCP server、从其他 harness 迁移还是手动添加）
 
 > 每轮用 `ask_user_question` 结构化提问效果更佳；用户也可用自定义回答。轮次之间允许用户补充修改上一轮的答案。
 
@@ -347,19 +352,18 @@ else echo "rpiv-ask-user-question: 未装"; fi
 
 ### K. MCP 接入（第 6 轮）
 
-25. **是否复用其他 harness 已配的 MCP server**？pi-mcp-adapter 能从 Claude Code / Codex / Cursor / Windsurf / VS Code / opencode 等的 MCP 配置里读取 server，避免重复配置。但**默认是关的**（`hostConfigDiscovery: "off"`），需要用户选一种接入方式：
+25. **是否需要 MCP server**？pi **内置** MCP 支持（无需第三方扩展，也没有自动发现机制），从 `~/.pi/agent/mcp.json`（用户级）和项目内 `.pi/mcp.json`（项目级，需 project trust）读取 server。选一种接入方式：
 
     | 方式 | 做法 | 特点 |
     |---|---|---|
-    | **A. 自动导入（推荐）** | 在 `~/.pi/agent/mcp.json` 写 `{"settings":{"hostConfigDiscovery":"on"}}` | pi 启动时自动把所有 harness 的 MCP server 作为最低优先级加载，零打扰；以后增删自动同步；只读不改外部配置 |
-    | B. 手动逐个导入 | 在 pi 里跑 `/mcp setup` 交互选 | 挑要导入的 server，写进 pi 自己的 mcp.json；适合只想要其中几个 |
-    | C. CLI 一次性发现 | `pi-mcp-adapter init --discover-host-configs` | 命令行版手动导入 |
-    | D. 不复用 | `hostConfigDiscovery` 保持 `"off"`，不写 mcp.json | 用户想全部手动在 pi 里重配 |
+    | **A. 从其他 harness 迁移（推荐给已有配置的用户）** | AI 读取 `~/.claude.json`、`~/.codex/config.toml`、`~/.cursor/mcp.json` 等文件，把 server 条目转换后写入 pi 自己的 mcp.json | 一次性迁移；之后在 pi 内独立管理，不再依赖外部文件；跨平台命令需转换（见 3.13） |
+    | B. 手动逐个添加 | `pi mcp add <name> -- <command...>`（CLI）或会话内 `/mcp` | 逐个添加，适合全新配置或只想要个别 server |
+    | C. 不用 MCP | 不写 mcp.json | 跳过 |
 
-    - **pi 能自动读的路径**（仅当 A 开启时）：`~/.claude.json`、`~/.claude/mcp.json`、`~/.claude/claude_desktop_config.json`（Claude Code）；`~/.codex/config.toml`、`~/.codex/config.json`（Codex）；`~/.cursor/mcp.json`；`~/.windsurf/mcp.json`；`./.vscode/mcp.json`（项目级）；`~/.config/opencode/opencode.json`；以及通用标准 `~/.config/mcp/mcp.json`、`~/.agents/mcp.json`。
-    - **默认推荐 A**：零配置同步、跨 harness 共用、不改外部文件。仅当用户明确不想让 pi 碰其他 harness 的配置时才选 D。
-    - 选 A 的写入见 3.13。选 B/C 的不写 mcp.json，由用户交互执行。
-    - **提醒**：导入的 server 能否真正连上，取决于其启动命令在 PATH 中（如 `npx` 需 Node、`uvx` 需 `uv`、自定义 CLI 需自行安装）。pi 会尝试拉起，拉不起的会在 `/mcp` 里显示失败状态。
+    - **可迁移的来源路径**（仅 A）：`~/.claude.json`、`~/.claude/mcp.json`、`~/.claude/claude_desktop_config.json`（Claude Code）；`~/.codex/config.toml`、`~/.codex/config.json`（Codex）；`~/.cursor/mcp.json`；`~/.windsurf/mcp.json`；`./.vscode/mcp.json`（项目级）；`~/.config/opencode/opencode.json`；以及通用标准 `~/.config/mcp/mcp.json`、`~/.agents/mcp.json`。
+    - **默认推荐 A**（若用户已有任何 harness 的 MCP 配置）：一次迁移即得全部常用 server。没有现成配置则选 B。
+    - 选 A 的转换与写入规则见 3.13。选 B 由用户自行执行 `pi mcp add`，AI 只需给出示例命令。选 C 不写任何文件。
+    - **提醒**：server 能否真正连上取决于启动命令在 PATH 中（如 `npx` 需 Node、`uvx` 需 `uv`、自定义 CLI 需自行安装）。连不上的会在 `/mcp` 或 `pi mcp list` 里显示失败状态，不影响其他 server。
 
 > 访谈完成后，**先向用户复述一遍汇总的答案**（含 skills 源选择 + MCP 接入方式），确认无误再进入阶段 2。
 
@@ -431,32 +435,33 @@ else echo "rpiv-ask-user-question: 未装"; fi
     <I15: 用户勾选的 skills 源路径列表，每项为字符串，如 "~/.claude/skills"、"~/.codex/skills"；没选任何源则删掉整个 skills 字段>
   ],
   "packages": [
-    "npm:@gotgenes/pi-permission-system@25.0.0",
-    "npm:@gotgenes/pi-subagents@19.2.2",
-    "npm:@gotgenes/pi-subagents-worktrees@0.3.0",
-    "npm:@juicesharp/rpiv-ask-user-question@2.4.0",
-    "npm:@juicesharp/rpiv-todo@2.4.0",
-    "npm:@narumitw/pi-goal@0.51.0",
-    "npm:@narumitw/pi-plan-mode@0.49.3",
-    "npm:@narumitw/pi-statusline@0.49.6",
-    "npm:pi-mcp-adapter@2.23.0",
-    "npm:pi-web-access@0.22.0"
+    "npm:@gotgenes/pi-permission-system@40.0.2",
+    "npm:@gotgenes/pi-subagents@23.2.0",
+    "npm:@gotgenes/pi-subagents-worktrees@0.3.3",
+    "npm:@juicesharp/rpiv-ask-user-question@2.12.0",
+    "npm:@juicesharp/rpiv-todo@2.12.0",
+    "npm:@narumitw/pi-goal@0.54.11",
+    "npm:@narumitw/pi-plan-mode@0.59.2",
+    "npm:@narumitw/pi-statusline@0.50.2",
+    "npm:pi-web-access@0.37.0"
   ]
 }
 ```
 
 **packages 取舍规则**：
-- **命令放行插件（J23）**：A → 保留 `"npm:@gotgenes/pi-permission-system@25.0.0"`；B → 删该行、加 `"npm:@ogulcancelik/pi-auto-permissions"`；C → 删该行且不加替代。A 与 B 严格互斥，不能共存。
-- **状态栏模式（J16）**：基础 → 保留 `"npm:@narumitw/pi-statusline@0.49.6"`；高级 → 删该行、加 `"npm:@narumitw/pi-starship"`；不装 → 删该行且不加替代。基础与高级不能共存。
+- **命令放行插件（J23）**：A → 保留 `"npm:@gotgenes/pi-permission-system@40.0.2"`；B → 删该行、加 `"npm:@ogulcancelik/pi-auto-permissions@0.1.4"`；C → 删该行且不加替代。A 与 B 严格互斥，不能共存。
+- **状态栏模式（J16）**：基础 → 保留 `"npm:@narumitw/pi-statusline@0.50.2"`；高级 → 删该行、加 `"npm:@narumitw/pi-starship@0.58.0"`；不装 → 删该行且不加替代。基础与高级不能共存。
+- **MCP**：pi 内置 MCP 支持，**不需要任何扩展**（不要安装 pi-mcp-adapter 等第三方 MCP 扩展，它们会顶替内置实现并触发命令冲突警告）。
 - 用户不要语音 → 不变（rpiv-voice 本就不在清单里，默认不装）
-- 用户用 rtk → 追加 `"npm:pi-rtk-optimizer@0.9.0"`；用户要语音 → 追加 `"npm:@juicesharp/rpiv-voice@2.4.0"`
+- 用户用 rtk → 追加 `"npm:pi-rtk-optimizer@0.9.0"`；用户要语音 → 追加 `"npm:@juicesharp/rpiv-voice@2.12.0"`
 - **以下 6 个扩展均为选装（默认不在清单里，逐项问用户是否需要，需要才追加）：**
-  - **LSP 语言服务**（按 G12）：写了 TS/JS → 追加 `"npm:@narumitw/pi-lsp@0.49.4"`；都不写 → 不加。
-  - **GitHub PR**（按 Q6）：用户用 gh → 追加 `"npm:@narumitw/pi-github-pr@0.49.3"`；不用 → 不加。
-  - **多语言支持**（`@juicesharp/rpiv-i18n`）：用户需要界面/输出多语言 → 追加 `"npm:@juicesharp/rpiv-i18n@2.4.0"`；不需要 → 不加（pi 默认英文界面）。
-  - **git worktree 管理**（`@narumitw/pi-worktree`）：用户需要 worktree 多分支并行 → 追加 `"npm:@narumitw/pi-worktree@0.50.0"`；不需要 → 不加。
-  - **后台任务**（`pi-background-tasks`）：用户需要长任务后台运行 + 更新检查 → 追加 `"npm:pi-background-tasks@2.3.0"`；不需要 → 不加。
-  - **持久记忆**（`pi-hermes-memory`）：用户需要跨会话持久记忆 → 追加 `"npm:pi-hermes-memory@0.9.4"`；不需要 → 不加。
+  - **LSP 语言服务**（按 G12）：写了 TS/JS → 追加 `"npm:@narumitw/pi-lsp@0.49.9"`；都不写 → 不加。
+  - **GitHub PR**（按 Q6）：用户用 gh → 追加 `"npm:@narumitw/pi-github-pr@0.49.8"`；不用 → 不加。
+  - **多语言支持**（`@juicesharp/rpiv-i18n`）：用户需要界面/输出多语言 → 追加 `"npm:@juicesharp/rpiv-i18n@2.12.0"`；不需要 → 不加（pi 默认英文界面）。
+  - **git worktree 管理**（`@narumitw/pi-worktree`）：用户需要 worktree 多分支并行 → 追加 `"npm:@narumitw/pi-worktree@0.51.8"`；不需要 → 不加。
+  - **后台任务**（`pi-background-tasks`）：用户需要长任务后台运行 + 更新检查 → 追加 `"npm:pi-background-tasks@2.6.9"`；不需要 → 不加。
+  - **持久记忆**（`pi-hermes-memory`）：用户需要跨会话持久记忆 → 追加 `"npm:pi-hermes-memory@0.9.10"`；不需要 → 不加。
+- **版本号说明**：上面固定了精确版本号以保证可复现安装。注意精确版本**不会被 `pi update --extensions` 自动升级**（它只做安装对账）；想升级需 `pi install npm:<包名>@latest` 重新安装，或干脆去掉版本号/写 `@latest` 让每次安装都取最新（代价是失去可复现性）。
 
 **skills 取舍规则**：
 - `enableSkillCommands: true` 固定写（启用 `/skill:name` 斜杠命令）。
@@ -909,30 +914,41 @@ export PI_BG_DISABLE_UPDATE_CHECK=1
 
 J24=开（默认）则什么都不做。
 
-### 3.13 `mcp.json` → `<HOME>/.pi/agent/mcp.json`（仅当第 6 轮 K25 选 A 时创建）
+### 3.13 `mcp.json` → `<HOME>/.pi/agent/mcp.json`（K25 选 A 时由 AI 转换写入；选 B 由用户自己 `pi mcp add` 生成；选 C 不创建）
 
-pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery: "off"`）。选 A 才开启自动导入。
+pi 内置 MCP 支持从该文件读取**用户级** server（项目级在 `<项目>/.pi/mcp.json`，需 project trust，同名时项目级覆盖用户级）。格式与其他主流 MCP 客户端一致：
 
 ```json
 {
-  "settings": {
-    "hostConfigDiscovery": "on"
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "docs": {
+      "url": "https://example.com/mcp",
+      "headers": { "Authorization": "Bearer ${DOCS_TOKEN}" }
+    }
   }
 }
 ```
 
-**效果**：pi 启动时自动从下列路径读取并合并 MCP server（只读，不改外部文件，最低优先级）：
-- `~/.claude.json`、`~/.claude/mcp.json`、`~/.claude/claude_desktop_config.json`（Claude Code）
-- `~/.codex/config.toml`、`~/.codex/config.json`（Codex）
-- `~/.cursor/mcp.json`、`~/.windsurf/mcp.json`、`./.vscode/mcp.json`、`~/.config/opencode/opencode.json`
-- 通用标准：`~/.config/mcp/mcp.json`、`~/.agents/mcp.json`
+**字段说明**：
+- **stdio server**：`command` / `args` / `env` / `cwd`；`command`、args、cwd 里开头的 `~` 会展开到主目录。
+- **HTTP server**：`url` / `headers`（支持 `${ENV_VAR}` 环境变量展开）/ `oauth`。不支持旧版 SSE 传输。
+- 两者都支持：`timeout`（每请求超时秒数，默认 60）、`enabled: false`（保留条目但不连接）、`exposure`/`toolExposure`（控制工具如何暴露给模型）。
 
-**取舍**：
-- K25=A → 写此文件。
-- K25=B 或 C → 不写此文件，由用户在 pi 里跑 `/mcp setup` 或 `pi-mcp-adapter init --discover-host-configs` 手动导入。
-- K25=D → 不写此文件，保持 `off`。
-- 若 pi 自己的 mcp.json 里有同名 server，pi 自己的优先（导入是最低优先级 fallback）。
-- 导入的 server 能否连上取决于启动命令在 PATH（`npx`/`uvx`/自定义 CLI）；连不上的在 `/mcp` 里显示失败，不影响其他 server。
+**迁移转换规则（仅 K25=A）**：
+- Windows 其他 harness 里的 `"command": "cmd", "args": ["/c", "npx", ...]` → mac/linux 目标设备改为 `"command": "npx", "args": [...]`（去掉 cmd 包装）；目标设备是 Windows 则保留 cmd 包装。
+- `uvx` / 自定义 CLI 条目：确认对应工具在目标设备已装，装不了的跳过并向用户说明。
+- 带 API key 的 HTTP server：key 用 `headers` + `${ENV_VAR}` 引用环境变量，避免明文进 git。
+- 其他 harness 的 server 条目中含 Windows 专属路径或不可用命令的，不迁移。
+
+**CLI / 会话内管理**：
+- 添加：`pi mcp add <name> -- npx -y @some/mcp-server`（默认写用户级；加 `-l` 写项目级）
+- 远程：`pi mcp add docs --url https://example.com/mcp --bearer-token-env-var DOCS_TOKEN`
+- 检查连接：`pi mcp list`
+- 会话内：`/mcp` 查看连接状态、OAuth 登录、启停 server；改完配置后 `/reload` 重新加载。
 
 ---
 
@@ -950,12 +966,14 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
    - `.pi/agent/hermes-memory-config.json`（若装 `pi-hermes-memory`）
    - `.pi/agent/pi-lsp.json`（若装 `@narumitw/pi-lsp`）
    - `.pi/agent/extensions/pi-permission-system/config.json`（J23=A）或 `.pi/agent/pi-auto-permissions/config.json`（J23=B）
+   - `.pi/agent/mcp.json`（若配置了 MCP）
 3. **重启 pi**：让 pi 读取 `settings.json` 的 `packages` 自动 `npm install` 全部扩展。
 4. **装后验证**：
    - `gh auth status`（若用 gh）
    - `typescript-language-server --version` / `rust-analyzer --version`（若用对应 LSP）
    - pi 启动后状态栏应显示配置的段：基础模式见 J16 勾选段（默认 ocean 配色）；高级模式见 `pi-starship.toml` 的 `format` 拼出的样子
 5. **provider 凭证**：用 pi 的 `/provider` 命令配置访谈 A1 的 provider + API key（或写入 `auth.json`）。
+6. **MCP 连接**（若写了 mcp.json）：跑 `pi mcp list`，每个 server 应显示 `connected`；失败的去 `/mcp` 看报错原因（通常是启动命令不在 PATH）。
 
 ---
 
@@ -1020,7 +1038,7 @@ pi-mcp-adapter 默认不从其他 harness 读 MCP 配置（`hostConfigDiscovery:
 | J23 | 命令放行插件（A pi-permission-system / B pi-auto-permissions / C 不装） | |
 | J23b | A: yoloMode 开/关；B: reviewer provider/model + guarded/convention 规则；C: 无 | |
 | J24 | 后台任务更新检查（开/关） | |
-| K25 | MCP 接入方式（A 自动 / B 手动 / C CLI / D 不复用） | |
+| K25 | MCP 接入方式（A 迁移其他 harness 配置 / B 手动 pi mcp add / C 不用） | |
 
 ---
 

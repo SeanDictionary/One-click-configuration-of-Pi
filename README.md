@@ -33,7 +33,7 @@ https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%
 | **权限** | `~/.pi/agent/extensions/pi-permission-system/config.json` 或 `~/.pi/agent/pi-auto-permissions/config.json` | 命令放行三选一：A 规则匹配（allow/ask/deny + yolo）/ B 模型语义判断 / C 不装（原生全放行） |
 | **模型融合** | `~/.pi/agent/fusion-models.json` | 多候选并行+评分合并（可选，默认不创建） |
 | **后台更新检查** | 环境变量 | `PI_BG_DISABLE_UPDATE_CHECK`（可选，默认开） |
-| **MCP** | `~/.pi/agent/mcp.json` | 复用其他 harness 的 MCP server（可选，默认 off） |
+| **MCP** | `~/.pi/agent/mcp.json` | 内置 MCP 支持：stdio/HTTP server 配置，可从其他 harness（Claude Code/Codex/Cursor 等）一键迁移（可选） |
 
 ### 涉及的扩展
 
@@ -53,7 +53,6 @@ https://github.com/SeanDictionary/One-click-configuration-of-Pi/blob/main/pi%E9%
 | `@narumitw/pi-worktree` | git worktree 管理 | 可选（需要 worktree 才装） |
 | `pi-background-tasks` | 后台任务（带更新检查） | 可选（需要后台任务才装） |
 | `pi-hermes-memory` | 持久记忆系统 | 可选（需要跨会话记忆才装） |
-| `pi-mcp-adapter` | MCP server 适配（可复用其他 harness 配置） | 必装 |
 | `pi-web-access` | 联网搜索 / 抓取 / YouTube / PDF | 必装 |
 | `@juicesharp/rpiv-voice` | 语音输入/输出 | 可选 |
 | `pi-rtk-optimizer` | rtk 工具链 | 可选 |
